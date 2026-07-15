@@ -17,6 +17,9 @@ notify.Parent = remotes
 local putBack = Instance.new("RemoteEvent")
 putBack.Name = "PutBack"
 putBack.Parent = remotes
+local playSound = Instance.new("RemoteEvent")
+playSound.Name = "PlaySound"
+playSound.Parent = remotes
 remotes.Parent = ReplicatedStorage
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)

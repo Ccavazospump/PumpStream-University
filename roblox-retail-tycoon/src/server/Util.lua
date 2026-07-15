@@ -6,6 +6,7 @@
 ]]
 
 local Players = game:GetService("Players")
+local PathfindingService = game:GetService("PathfindingService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Util = {}
@@ -258,6 +259,47 @@ function Util.walkPath(model, points)
 		end
 	end
 	return true
+end
+
+-- Smart walk: uses PathfindingService so NPCs route around shelves,
+-- counters and walls instead of bumping into them. Falls back to a
+-- straight walk if no path can be computed.
+function Util.pathWalkTo(model, position)
+	local root = model:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return false
+	end
+
+	local path = PathfindingService:CreatePath({
+		AgentRadius = 2.5,
+		AgentHeight = 6,
+		AgentCanJump = false,
+	})
+	local ok = pcall(function()
+		path:ComputeAsync(root.Position, position)
+	end)
+
+	if ok and path.Status == Enum.PathStatus.Success then
+		for _, waypoint in ipairs(path:GetWaypoints()) do
+			if not model.Parent then
+				return false
+			end
+			if not Util.walkTo(model, waypoint.Position, 6) then
+				return false
+			end
+		end
+		return true
+	end
+	return Util.walkTo(model, position)
+end
+
+-- Play a named UI sound effect for one player (defined client-side).
+function Util.sound(player, name)
+	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+	local playSound = remotes and remotes:FindFirstChild("PlaySound")
+	if playSound and player and player.Parent then
+		playSound:FireClient(player, name)
+	end
 end
 
 -- Toast notification on the player's screen (handled by the client script).

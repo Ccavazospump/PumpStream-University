@@ -148,6 +148,54 @@ end
 
 notifyRemote.OnClientEvent:Connect(showToast)
 
+-- ========================= Sound effects =========================
+-- Built-in Roblox sounds (rbxasset = always available, no uploads).
+-- Each entry: file, pitch, volume, and optional echo notes for layered
+-- effects (the money "ka-ching" is two quick pings).
+
+local SOUND_DEFS = {
+	pickup = { file = "rbxasset://sounds/button.wav", pitch = 1.15, volume = 0.5 },
+	putback = { file = "rbxasset://sounds/button.wav", pitch = 0.8, volume = 0.5 },
+	money = { file = "rbxasset://sounds/electronicpingshort.wav", pitch = 1.2, volume = 0.6, echoPitch = 1.6, echoDelay = 0.09 },
+	orderComplete = { file = "rbxasset://sounds/victory.wav", pitch = 1, volume = 0.3 },
+	newOrder = { file = "rbxasset://sounds/electronicpingshort.wav", pitch = 0.9, volume = 0.7, echoPitch = 1.1, echoDelay = 0.18 },
+	angry = { file = "rbxasset://sounds/uuhhh.wav", pitch = 1, volume = 0.5 },
+	purchase = { file = "rbxasset://sounds/snap.wav", pitch = 1.1, volume = 0.6 },
+}
+
+local function playOnce(def, pitchOverride)
+	local sound = Instance.new("Sound")
+	sound.SoundId = def.file
+	sound.Volume = def.volume or 0.5
+	sound.PlaybackSpeed = pitchOverride or def.pitch or 1
+	sound.Parent = screenGui
+	sound.Ended:Once(function()
+		sound:Destroy()
+	end)
+	sound:Play()
+	task.delay(4, function()
+		if sound.Parent then
+			sound:Destroy()
+		end
+	end)
+end
+
+local function playSoundEffect(name)
+	local def = SOUND_DEFS[name]
+	if not def then
+		return
+	end
+	playOnce(def)
+	if def.echoPitch then
+		task.delay(def.echoDelay or 0.1, function()
+			playOnce(def, def.echoPitch)
+		end)
+	end
+end
+
+local soundRemote = remotes:WaitForChild("PlaySound")
+soundRemote.OnClientEvent:Connect(playSoundEffect)
+
 -- ===================== Put-back keybind (X) ======================
 
 local putBackRemote = remotes:WaitForChild("PutBack")
@@ -164,8 +212,9 @@ end)
 
 local TIPS = {
 	"🏪 Step on a glowing green pad to claim your store!",
-	"🛒 Customers order at the counter — grab their items from the shelves.",
-	"🤝 Walk back and use 'Hand Over Items', then 'Checkout' to get paid.",
+	"🛒 Customers shop the aisles themselves — meet them at the register.",
+	"💵 Stand at the register and use 'Checkout Customer' to ring them up.",
+	"📱 Unlock Online Orders for curbside pickups — YOU shop those, for 1.5x pay!",
 	"↩️ Wrong item? Press X to put it back, or use the Returns Bin.",
 	"⭐ Buy the glowing upgrade pad to unlock the next thing — keep expanding!",
 }

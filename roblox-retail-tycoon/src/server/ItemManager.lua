@@ -74,6 +74,7 @@ function ItemManager.pickup(player, plot, itemId)
 	end
 	table.insert(list, itemId)
 	refreshStack(player)
+	Util.sound(player, "pickup")
 	Util.notify(player, "Picked up " .. GameConfig.Items[itemId].name, "info")
 end
 
@@ -112,6 +113,7 @@ function ItemManager.putBackLast(player)
 	end
 	local itemId = table.remove(list)
 	refreshStack(player)
+	Util.sound(player, "putback")
 	Util.notify(player, "Put back " .. GameConfig.Items[itemId].name, "info")
 end
 

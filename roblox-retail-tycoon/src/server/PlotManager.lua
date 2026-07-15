@@ -56,6 +56,13 @@ local function applyUpgrade(plot, upgrade, silent)
 		if upgrade.value > plot.expansionLevel then
 			PlotBuilder.buildShell(plot, upgrade.value)
 		end
+	elseif upgrade.kind == "service" then
+		plot.curbsideSpots += 1
+		PlotBuilder.buildCurbsideSpot(plot, plot.curbsideSpots)
+		CustomerManager.startOnlineLoop(plot)
+	elseif upgrade.kind == "curbside" then
+		plot.curbsideSpots += 1
+		PlotBuilder.buildCurbsideSpot(plot, plot.curbsideSpots)
 	elseif upgrade.kind == "carry" then
 		local current = plot.owner:GetAttribute("CarryCapacity") or GameConfig.BaseCarryCapacity
 		plot.owner:SetAttribute("CarryCapacity", math.max(current, upgrade.value))
@@ -93,6 +100,7 @@ local function tryPurchase(plot, player, upgrade)
 	end
 
 	table.insert(plot.upgradeIds, upgrade.id)
+	Util.sound(player, "purchase")
 	applyUpgrade(plot, upgrade, false)
 	PlotBuilder.refreshUpgradePads(plot, ownedSet(plot))
 end
@@ -116,6 +124,7 @@ function PlotManager.claim(plot, player)
 	plot.maxCustomers = GameConfig.Customers.BaseMaxCustomers
 	plot.spawnInterval = GameConfig.Customers.BaseSpawnInterval
 	plot.payMultiplier = 1
+	plot.curbsideSpots = 0
 
 	PlotBuilder.setClaimPadVisible(plot, false)
 	PlotBuilder.setOwnerSign(plot, "🛒 " .. player.Name .. "'s Market")
@@ -130,22 +139,19 @@ function PlotManager.claim(plot, player)
 	end
 	PlotBuilder.refreshUpgradePads(plot, ownedSet(plot))
 
-	-- wire each new customer's prompts to the gameplay systems
+	-- curbside customers get a hand-over prompt; walk-ins serve themselves
 	plot.onCustomerSpawned = function(customer)
-		customer.givePrompt.Triggered:Connect(function(promptPlayer)
-			if plot.owner == promptPlayer then
-				ItemManager.giveTo(promptPlayer, plot, customer)
-			end
-		end)
-		customer.checkoutPrompt.Triggered:Connect(function(promptPlayer)
-			if plot.owner == promptPlayer then
-				CustomerManager.checkout(plot, customer)
-			end
-		end)
+		if customer.givePrompt then
+			customer.givePrompt.Triggered:Connect(function(promptPlayer)
+				if plot.owner == promptPlayer then
+					ItemManager.giveTo(promptPlayer, plot, customer)
+				end
+			end)
+		end
 	end
 
 	CustomerManager.startLoop(plot)
-	Util.notify(player, "🏪 Welcome to your store! Customers are on the way — listen for their orders at the counter.", "success")
+	Util.notify(player, "🏪 Welcome to your store! Customers will shop the aisles — ring them up at the register.", "success")
 end
 
 function PlotManager.release(player)
@@ -157,6 +163,8 @@ function PlotManager.release(player)
 			CustomerManager.clearAll(plot)
 			StaffManager.dismissAll(plot)
 			PlotBuilder.clearSections(plot)
+			PlotBuilder.clearCurbside(plot)
+			plot.curbsideSpots = 0
 			PlotBuilder.refreshUpgradePads(plot, nil)
 			PlotBuilder.setOwnerSign(plot, "FOR SALE — Store #" .. plot.index)
 			if plot.expansionLevel ~= 1 then
@@ -209,6 +217,11 @@ function PlotManager.init()
 		-- returns bin: anyone can put back what they're carrying
 		plot.returnsPrompt.Triggered:Connect(function(player)
 			ItemManager.putBackAll(player)
+		end)
+
+		-- the register: where walk-in customers get checked out
+		plot.registerPrompt.Triggered:Connect(function(player)
+			CustomerManager.checkoutAtRegister(plot, player)
 		end)
 	end
 end

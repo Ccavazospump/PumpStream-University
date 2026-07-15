@@ -6,23 +6,30 @@ personal shoppers, and checkout — turned into a fun gameplay loop.
 
 ## The Fantasy
 
-You start with an empty storefront and four crates of produce. Customers walk
-in and order at the counter, and **you** are the personal shopper: run to the
-shelf, grab the item, run back, hand it over, ring them up. As money comes in
-you unlock real store departments and eventually hire staff to do the running
-for you — going from solo shopkeeper to store manager.
+Run a real supermarket the way a real one works. Walk-in customers shop the
+aisles **themselves** and line up at your register — you ring them up. Then
+you unlock **Online Orders**, and the personal-shopper gameplay kicks in:
+orders ping in, you race the aisles gathering them, and hand them off at
+curbside spots outside for premium pay. Hire a Cashier to run the register
+and Personal Shoppers to work curbside, and graduate from clerk to manager.
 
-## Core Loop (moment-to-moment)
+## Core Loops (moment-to-moment)
 
-1. A customer NPC walks in from the street and stops at the counter.
-2. A speech bubble above them shows their order (e.g. `Apple 0/2, Milk 0/1`).
-3. You run to the right department, hold **E** at a shelf to grab an item
-   (it stacks visibly above your head).
-4. Run back and **Hand Over Items** at the customer. Repeat until the order
-   shows all ✅.
-5. **Checkout** — cash register sound, money in your pocket, customer leaves
-   happy. Sometimes they tip!
-6. If you're too slow (2 minutes), they storm out angry and you earn nothing.
+**Walk-ins (the register loop):**
+1. A customer walks in, browses the aisles, and visibly collects their own
+   groceries (you can watch their stack grow).
+2. They line up at the register showing 💰 "Ready to check out!"
+3. Stand at the register and use **Checkout Customer** — ka-ching, money in
+   pocket, sometimes a tip. Too slow (90s) and they storm out unpaid.
+
+**Curbside (the personal-shopper loop — unlocked with Online Orders, $1,500):**
+1. 📱 *Ding!* — an alert: a new online order, with a customer heading to a
+   curbside spot outside.
+2. Their order floats over the spot. You run the aisles, hold **E** to grab
+   items (X puts back mistakes; the Returns Bin dumps everything).
+3. Hand the order over at the curbside spot: **1.5× item value + $10 fee.**
+4. Buy more curbside spots to run multiple orders at once — or hire
+   Personal Shoppers to work them for you.
 
 ## Progression Loop (session-to-session)
 

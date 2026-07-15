@@ -30,12 +30,26 @@ GameConfig.Customers = {
 	BaseSpawnInterval = 12, -- seconds between customers (before upgrades)
 	MinSpawnInterval = 5, -- upgrades can never push it below this
 	BaseMaxCustomers = 2, -- customers in the store at once (before upgrades)
-	Patience = 150, -- seconds a customer waits before storming out
+	RegisterPatience = 90, -- seconds they'll wait at the register before storming out
 	WalkSpeed = 13,
 	MaxOrderLines = 5, -- most distinct items in one order
 	QuantityTwoChance = 0.3, -- chance an order line asks for 2 of an item
+	ShopSeconds = { 0.8, 1.8 }, -- how long a customer browses at each shelf
 	TipChance = 0.35, -- chance of a tip on checkout
 	TipRange = { 2, 12 }, -- min/max tip
+}
+
+-- Curbside / online orders (unlocked with the Online Orders upgrade).
+-- The player (or a Personal Shopper) gathers the items and hands them to
+-- the customer waiting at a curbside spot outside — for premium pay.
+GameConfig.OnlineOrders = {
+	BaseInterval = 30, -- average seconds between new online orders
+	MinItems = 2,
+	MaxItems = 4,
+	PayMultiplier = 1.5, -- items are worth 1.5x through the app
+	PickupFee = 10, -- flat fee per completed pickup
+	Patience = 180, -- curbside customers wait longer
+	MaxSpots = 3,
 }
 
 -- How many items a player can carry before any upgrades
@@ -217,10 +231,14 @@ GameConfig.Upgrades = {
 	{ id = "Speedy2", name = "Fast Service II", desc = "Customers arrive sooner", cost = 3600, kind = "spawnRate", value = 3, requires = "Marketing2", slot = "economy" },
 	{ id = "ProBag", name = "Pro Shopper Bag", desc = "Carry 9 items", cost = 5200, kind = "carry", value = 9, requires = "Speedy2", slot = "economy" },
 	{ id = "GoldTipJar", name = "Golden Tip Jar", desc = "+35% checkout pay", cost = 7000, kind = "payMultiplier", value = 0.35, requires = "ProBag", slot = "economy" },
+	-- services chain (curbside / online orders)
+	{ id = "OnlineOrders", name = "Online Orders", desc = "Curbside pickup: 1.5x pay!", cost = 1500, kind = "service", slot = "services" },
+	{ id = "Curbside2", name = "2nd Curbside Spot", desc = "Two online orders at once", cost = 3000, kind = "curbside", requires = "OnlineOrders", slot = "services" },
+	{ id = "Curbside3", name = "3rd Curbside Spot", desc = "Three online orders at once", cost = 5500, kind = "curbside", requires = "Curbside2", slot = "services" },
 	-- staff chain
-	{ id = "Shopper", name = "Hire Personal Shopper", desc = "Fetches items for you", cost = 2800, kind = "staff", role = "Shopper", slot = "staff" },
-	{ id = "Cashier", name = "Hire Cashier", desc = "Checks customers out", cost = 4000, kind = "staff", role = "Cashier", requires = "Shopper", slot = "staff" },
-	{ id = "Shopper2", name = "2nd Personal Shopper", desc = "Double the fetching", cost = 6800, kind = "staff", role = "Shopper", requires = "Cashier", slot = "staff" },
+	{ id = "Cashier", name = "Hire Cashier", desc = "Runs the register for you", cost = 2400, kind = "staff", role = "Cashier", slot = "staff" },
+	{ id = "Shopper", name = "Hire Personal Shopper", desc = "Shops curbside orders", cost = 4200, kind = "staff", role = "Shopper", requires = "OnlineOrders", slot = "staff" },
+	{ id = "Shopper2", name = "2nd Personal Shopper", desc = "Double the curbside crew", cost = 6800, kind = "staff", role = "Shopper", requires = "Shopper", slot = "staff" },
 }
 
 function GameConfig.getSection(id)

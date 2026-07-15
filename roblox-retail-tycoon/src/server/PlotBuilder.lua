@@ -43,10 +43,11 @@ local COLORS = {
 	ReturnsBin = Color3.fromRGB(78, 182, 164),
 }
 
--- fixed pad spots for the two chains that live near the door
+-- fixed pad spots for the chains that live near the door
 local CHAIN_SLOTS = {
 	economy = { 12, -2 },
-	staff = { 18, -2 },
+	staff = { 19, -2 },
+	services = { 26, -2 },
 }
 
 -- ========================= Expandable shell ==========================
@@ -333,7 +334,9 @@ function PlotBuilder.build(origin, index)
 		expansionLevel = 1,
 		padByUpgrade = {},
 		shelfPositions = {}, -- itemId -> world Vector3 in the aisle
-		customers = {},
+		customers = {}, -- walk-in shoppers
+		onlineCustomers = {}, -- curbside pickups
+		curbsideSpots = 0,
 		staff = {},
 		signText = nil,
 	}
@@ -360,6 +363,11 @@ function PlotBuilder.build(origin, index)
 	sectionsFolder.Name = "Sections"
 	sectionsFolder.Parent = model
 	plot.sectionsFolder = sectionsFolder
+
+	local curbsideFolder = Instance.new("Folder")
+	curbsideFolder.Name = "Curbside"
+	curbsideFolder.Parent = model
+	plot.curbsideFolder = curbsideFolder
 
 	PlotBuilder.buildShell(plot, 1)
 
@@ -392,6 +400,15 @@ function PlotBuilder.build(origin, index)
 		offsetY = 2,
 		maxDistance = 35,
 	})
+	-- ringing up customers happens HERE, at the register
+	local registerPrompt = Instance.new("ProximityPrompt")
+	registerPrompt.ActionText = "Checkout Customer"
+	registerPrompt.ObjectText = "Register"
+	registerPrompt.HoldDuration = 0.25
+	registerPrompt.MaxActivationDistance = 9
+	registerPrompt.RequiresLineOfSight = false
+	registerPrompt.Parent = register
+	plot.registerPrompt = registerPrompt
 
 	-- returns bin: put back wrongly-grabbed items
 	local returnsBin = Util.part({
@@ -454,9 +471,46 @@ function PlotBuilder.build(origin, index)
 	plot.getCounterGap = function(side)
 		return point(side >= 0 and 2 or -31.5, -8)
 	end
+	-- curbside parking spots outside, to the right of the entrance
+	plot.getCurbsideSpot = function(spotIndex)
+		return point(16 + (spotIndex - 1) * 10, 18)
+	end
 
 	model.Parent = workspace
 	return plot
+end
+
+-- Paint a curbside pickup spot outside (called when the upgrade unlocks it).
+function PlotBuilder.buildCurbsideSpot(plot, spotIndex)
+	local origin = plot.origin
+	local x = 16 + (spotIndex - 1) * 10
+
+	local spot = Util.part({
+		Name = "CurbsideSpot" .. spotIndex,
+		Size = Vector3.new(8, 0.15, 11),
+		CFrame = origin * CFrame.new(x, GROUND + 0.14, 18),
+		Color = Color3.fromRGB(70, 72, 78),
+		Parent = plot.curbsideFolder,
+	})
+	-- white border stripes
+	for _, edge in ipairs({ { 0, -5.4, 8.4, 0.5 }, { 0, 5.4, 8.4, 0.5 }, { -4, 0, 0.5, 10.6 }, { 4, 0, 0.5, 10.6 } }) do
+		Util.part({
+			Name = "Stripe",
+			Size = Vector3.new(edge[3], 0.16, edge[4]),
+			CFrame = origin * CFrame.new(x + edge[1], GROUND + 0.16, 18 + edge[2]),
+			Color = Color3.fromRGB(245, 245, 245),
+			Parent = plot.curbsideFolder,
+		})
+	end
+	Util.billboard(spot, "📱 CURBSIDE " .. spotIndex, {
+		size = UDim2.fromOffset(130, 32),
+		offsetY = 5,
+		maxDistance = 80,
+	})
+end
+
+function PlotBuilder.clearCurbside(plot)
+	plot.curbsideFolder:ClearAllChildren()
 end
 
 -- Show/hide the claim pad (hidden while the plot is owned).
