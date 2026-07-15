@@ -52,6 +52,10 @@ end
 local function applyUpgrade(plot, upgrade, silent)
 	if upgrade.kind == "section" then
 		buildAndWireSection(plot, upgrade.id)
+	elseif upgrade.kind == "expand" then
+		if upgrade.value > plot.expansionLevel then
+			PlotBuilder.buildShell(plot, upgrade.value)
+		end
 	elseif upgrade.kind == "carry" then
 		local current = plot.owner:GetAttribute("CarryCapacity") or GameConfig.BaseCarryCapacity
 		plot.owner:SetAttribute("CarryCapacity", math.max(current, upgrade.value))
@@ -155,6 +159,9 @@ function PlotManager.release(player)
 			PlotBuilder.clearSections(plot)
 			PlotBuilder.refreshUpgradePads(plot, nil)
 			PlotBuilder.setOwnerSign(plot, "FOR SALE — Store #" .. plot.index)
+			if plot.expansionLevel ~= 1 then
+				PlotBuilder.buildShell(plot, 1) -- shrink back to the starter store
+			end
 			PlotBuilder.setClaimPadVisible(plot, true)
 			break
 		end
@@ -198,6 +205,11 @@ function PlotManager.init()
 				end)
 			end
 		end
+
+		-- returns bin: anyone can put back what they're carrying
+		plot.returnsPrompt.Triggered:Connect(function(player)
+			ItemManager.putBackAll(player)
+		end)
 	end
 end
 

@@ -29,7 +29,10 @@ There are two ways. Option A is easiest if you've never used external tools.
    | `src/server/Util.lua` | same `Server` folder | **ModuleScript** | `Util` |
    | `src/server/Economy.lua` | same `Server` folder | **ModuleScript** | `Economy` |
    | `src/server/SaveManager.lua` | same `Server` folder | **ModuleScript** | `SaveManager` |
+   | `src/server/Ambiance.lua` | same `Server` folder | **ModuleScript** | `Ambiance` |
+   | `src/server/ItemVisuals.lua` | same `Server` folder | **ModuleScript** | `ItemVisuals` |
    | `src/server/PlotBuilder.lua` | same `Server` folder | **ModuleScript** | `PlotBuilder` |
+   | `src/server/PlotManager.lua` | same `Server` folder | **ModuleScript** | `PlotManager` |
    | `src/server/CustomerManager.lua` | same `Server` folder | **ModuleScript** | `CustomerManager` |
    | `src/server/ItemManager.lua` | same `Server` folder | **ModuleScript** | `ItemManager` |
    | `src/server/StaffManager.lua` | same `Server` folder | **ModuleScript** | `StaffManager` |

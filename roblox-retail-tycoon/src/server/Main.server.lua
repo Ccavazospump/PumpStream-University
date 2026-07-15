@@ -14,6 +14,9 @@ remotes.Name = "Remotes"
 local notify = Instance.new("RemoteEvent")
 notify.Name = "Notify"
 notify.Parent = remotes
+local putBack = Instance.new("RemoteEvent")
+putBack.Name = "PutBack"
+putBack.Parent = remotes
 remotes.Parent = ReplicatedStorage
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
@@ -64,6 +67,10 @@ Players.PlayerAdded:Connect(function(player)
 			end)
 		end
 	end)
+end)
+
+putBack.OnServerEvent:Connect(function(player)
+	ItemManager.putBackLast(player)
 end)
 
 Players.PlayerRemoving:Connect(function(player)

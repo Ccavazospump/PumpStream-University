@@ -2,13 +2,18 @@
 	ItemManager
 	-----------
 	The pick-up / carry / hand-over system. Carried items are shown as a
-	stack of colored cubes floating above the player's head. Carry
-	capacity starts at 1 and grows with the Basket and Cart upgrades.
+	stack of little product models above the player's head. Carry capacity
+	starts at 1 and grows with Basket / Cart / Pro Bag upgrades.
+
+	Grabbed the wrong thing? Two ways to fix it:
+	  • press X to put back the last item you picked up
+	  • use the Returns Bin by the checkout to put back everything
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local Util = require(script.Parent.Util)
+local ItemVisuals = require(script.Parent.ItemVisuals)
 local CustomerManager = require(script.Parent.CustomerManager)
 
 local ItemManager = {}
@@ -19,7 +24,7 @@ local function getCapacity(player)
 	return player:GetAttribute("CarryCapacity") or GameConfig.BaseCarryCapacity
 end
 
--- Rebuild the floating stack of item cubes above the player's head.
+-- Rebuild the floating stack of product models above the player's head.
 local function refreshStack(player)
 	local list = carried[player] or {}
 	local character = player.Character
@@ -31,7 +36,6 @@ local function refreshStack(player)
 		return
 	end
 
-	-- clear old visuals
 	for _, child in ipairs(character:GetChildren()) do
 		if child.Name == "CarriedItem" then
 			child:Destroy()
@@ -39,21 +43,14 @@ local function refreshStack(player)
 	end
 
 	for index, itemId in ipairs(list) do
-		local item = GameConfig.Items[itemId]
-		local cube = Instance.new("Part")
-		cube.Name = "CarriedItem"
-		cube.Size = Vector3.new(1.2, 1.2, 1.2)
-		cube.Color = item.color
-		cube.CanCollide = false
-		cube.Massless = true
-		cube.TopSurface = Enum.SurfaceType.Smooth
-		cube.BottomSurface = Enum.SurfaceType.Smooth
-		cube.CFrame = root.CFrame * CFrame.new(0, 3 + index * 1.35, 0)
+		local model = ItemVisuals.buildModel(itemId, { anchored = false, scale = 0.75 })
+		model.Name = "CarriedItem"
+		model:PivotTo(root.CFrame * CFrame.new(0, 2.8 + index * 1.15, 0))
 		local weld = Instance.new("WeldConstraint")
 		weld.Part0 = root
-		weld.Part1 = cube
-		weld.Parent = cube
-		cube.Parent = character
+		weld.Part1 = model.PrimaryPart
+		weld.Parent = model.PrimaryPart
+		model.Parent = character
 	end
 
 	player:SetAttribute("Carrying", #list)
@@ -72,7 +69,7 @@ function ItemManager.pickup(player, plot, itemId)
 	end
 	local capacity = getCapacity(player)
 	if #list >= capacity then
-		Util.notify(player, string.format("🧺 Hands full! (%d/%d) — buy a Basket or Cart upgrade.", #list, capacity), "error")
+		Util.notify(player, string.format("🧺 Hands full! (%d/%d) — press X to put one back.", #list, capacity), "error")
 		return
 	end
 	table.insert(list, itemId)
@@ -103,8 +100,31 @@ function ItemManager.giveTo(player, plot, customer)
 	if delivered > 0 then
 		refreshStack(player)
 	else
-		Util.notify(player, customer.model.Name .. " doesn't need any of that.", "error")
+		Util.notify(player, customer.model.Name .. " doesn't need any of that — press X to put it back.", "error")
 	end
+end
+
+-- X key: put back the most recently grabbed item.
+function ItemManager.putBackLast(player)
+	local list = carried[player]
+	if not list or #list == 0 then
+		return
+	end
+	local itemId = table.remove(list)
+	refreshStack(player)
+	Util.notify(player, "Put back " .. GameConfig.Items[itemId].name, "info")
+end
+
+-- Returns Bin: put back everything.
+function ItemManager.putBackAll(player)
+	local list = carried[player]
+	if not list or #list == 0 then
+		Util.notify(player, "You're not carrying anything.", "info")
+		return
+	end
+	carried[player] = {}
+	refreshStack(player)
+	Util.notify(player, "↩️ Put everything back. Fresh start!", "success")
 end
 
 -- Drop everything (death, leaving, releasing plot).

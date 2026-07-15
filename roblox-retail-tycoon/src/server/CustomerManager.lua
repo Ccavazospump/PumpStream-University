@@ -66,7 +66,7 @@ local function generateOrder(plot)
 	end
 
 	-- more departments unlocked -> bigger possible orders
-	local orderSize = math.random(1, math.min(4, 1 + #plot.unlockedSections, #pool))
+	local orderSize = math.random(1, math.min(GameConfig.Customers.MaxOrderLines, 1 + #plot.unlockedSections, #pool))
 	local order = {}
 	for i = 1, orderSize do
 		local need = (math.random() < GameConfig.Customers.QuantityTwoChance) and 2 or 1

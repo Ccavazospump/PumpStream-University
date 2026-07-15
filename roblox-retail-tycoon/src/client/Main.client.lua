@@ -8,6 +8,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -48,8 +49,8 @@ local function styledLabel(parent, textSize)
 	return label
 end
 
--- cash (top center) — with a green gradient + outline so it pops
-local cashFrame = styledFrame(UDim2.fromOffset(190, 46), UDim2.new(0.5, 0, 0, 12))
+-- cash (bottom-left) — with a green gradient + outline so it pops
+local cashFrame = styledFrame(UDim2.fromOffset(200, 48), UDim2.new(0, 14, 1, -14), Vector2.new(0, 1))
 cashFrame.BackgroundTransparency = 0.1
 do
 	local gradient = Instance.new("UIGradient")
@@ -65,9 +66,9 @@ end
 local cashLabel = styledLabel(cashFrame, 24)
 cashLabel.TextColor3 = Color3.fromRGB(150, 255, 170)
 
--- carry counter (under the cash)
-local carryFrame = styledFrame(UDim2.fromOffset(130, 34), UDim2.new(0.5, 0, 0, 64))
-local carryLabel = styledLabel(carryFrame, 18)
+-- carry counter (above the cash, bottom-left)
+local carryFrame = styledFrame(UDim2.fromOffset(200, 32), UDim2.new(0, 14, 1, -68), Vector2.new(0, 1))
+local carryLabel = styledLabel(carryFrame, 16)
 
 local function updateCash()
 	local leaderstats = player:FindFirstChild("leaderstats")
@@ -78,7 +79,11 @@ end
 local function updateCarry()
 	local carrying = player:GetAttribute("Carrying") or 0
 	local capacity = player:GetAttribute("CarryCapacity") or 1
-	carryLabel.Text = string.format("🧺 %d / %d", carrying, capacity)
+	if carrying > 0 then
+		carryLabel.Text = string.format("🧺 %d / %d   [X] put back", carrying, capacity)
+	else
+		carryLabel.Text = string.format("🧺 %d / %d", carrying, capacity)
+	end
 end
 
 task.spawn(function()
@@ -143,13 +148,26 @@ end
 
 notifyRemote.OnClientEvent:Connect(showToast)
 
+-- ===================== Put-back keybind (X) ======================
+
+local putBackRemote = remotes:WaitForChild("PutBack")
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then
+		return
+	end
+	if input.KeyCode == Enum.KeyCode.X then
+		putBackRemote:FireServer()
+	end
+end)
+
 -- ========================= Welcome tips ==========================
 
 local TIPS = {
 	"🏪 Step on a glowing green pad to claim your store!",
 	"🛒 Customers order at the counter — grab their items from the shelves.",
 	"🤝 Walk back and use 'Hand Over Items', then 'Checkout' to get paid.",
-	"⭐ Spend your cash on the gold upgrade pads to grow your store!",
+	"↩️ Wrong item? Press X to put it back, or use the Returns Bin.",
+	"⭐ Buy the glowing upgrade pad to unlock the next thing — keep expanding!",
 }
 
 task.spawn(function()

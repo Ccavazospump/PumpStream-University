@@ -1,13 +1,16 @@
 --[[
 	Util
 	----
-	Small shared helpers: part building, signs/billboards, simple block-rig
-	NPCs, NPC walking, and player toast notifications.
+	Shared helpers: part building, signs/billboards, NPC characters
+	(real R15 rigs with walk animations), NPC walking, and player toasts.
 ]]
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Util = {}
+
+-- ============================ Parts & signs ============================
 
 -- Create an anchored, smooth Part from a property table.
 function Util.part(props)
@@ -74,9 +77,20 @@ function Util.surfaceSign(part, face, text, textColor)
 	return label
 end
 
--- Simple blocky NPC rig (root + torso + head + legs) that Humanoid:MoveTo can drive.
--- Swap this out for a real R15 rig later if you want fancier characters.
-function Util.createNPC(displayName, shirtColor)
+-- ================================ NPCs =================================
+
+local SKIN_TONES = {
+	Color3.fromRGB(234, 184, 146),
+	Color3.fromRGB(204, 142, 105),
+	Color3.fromRGB(160, 105, 70),
+	Color3.fromRGB(110, 74, 52),
+	Color3.fromRGB(245, 205, 175),
+}
+
+local WALK_ANIMATION = "rbxassetid://507777826" -- Roblox default R15 walk
+
+-- Fallback blocky rig, used if R15 creation fails (e.g. no asset access).
+local function createBlockRig(displayName, shirtColor)
 	local model = Instance.new("Model")
 	model.Name = displayName
 
@@ -107,22 +121,83 @@ function Util.createNPC(displayName, shirtColor)
 
 	bodyPart("Torso", Vector3.new(2, 2, 1), Vector3.new(0, 0, 0), shirtColor)
 	bodyPart("Legs", Vector3.new(1.8, 2, 0.9), Vector3.new(0, -2, 0), Color3.fromRGB(60, 60, 80))
-	local head = bodyPart("Head", Vector3.new(1.3, 1.3, 1.3), Vector3.new(0, 1.7, 0), Color3.fromRGB(234, 184, 146))
+	local head = bodyPart("Head", Vector3.new(1.3, 1.3, 1.3), Vector3.new(0, 1.7, 0), SKIN_TONES[1])
 	head.Shape = Enum.PartType.Ball
 
 	local humanoid = Instance.new("Humanoid")
-	humanoid.RequiresNeck = false -- our rig has no neck joint; without this the NPC instantly dies
-	humanoid.HipHeight = 2 -- root bottom floats 2 studs above the floor (leg length)
-	humanoid.WalkSpeed = 11
+	humanoid.RequiresNeck = false
+	humanoid.HipHeight = 2
+	humanoid.Parent = model
+
+	model.PrimaryPart = root
+	return model, humanoid, root
+end
+
+-- Real R15 character with randomized skin tone / build and colored
+-- "clothes" (body part colors). Falls back to the block rig on failure.
+function Util.createNPC(displayName, shirtColor, pantsColor)
+	pantsColor = pantsColor or Color3.fromRGB(52, 60, 88)
+
+	local model, humanoid, root
+	local ok = pcall(function()
+		local description = Instance.new("HumanoidDescription")
+		local skin = SKIN_TONES[math.random(#SKIN_TONES)]
+		description.HeadColor = skin
+		description.LeftArmColor = skin
+		description.RightArmColor = skin
+		description.TorsoColor = shirtColor
+		description.LeftLegColor = pantsColor
+		description.RightLegColor = pantsColor
+		description.HeightScale = 0.95 + math.random() * 0.12
+		description.BodyTypeScale = math.random() * 0.25
+		description.WidthScale = 0.95 + math.random() * 0.12
+
+		model = Players:CreateHumanoidModelFromDescription(description, Enum.HumanoidRigType.R15)
+		model.Name = displayName
+		humanoid = model:FindFirstChildOfClass("Humanoid")
+		root = model:FindFirstChild("HumanoidRootPart")
+		assert(humanoid and root, "incomplete rig")
+	end)
+
+	if not ok or not humanoid then
+		if model then
+			model:Destroy()
+		end
+		model, humanoid, root = createBlockRig(displayName, shirtColor)
+	else
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+
+		-- walk animation, driven by actual movement speed
+		pcall(function()
+			local animator = humanoid:FindFirstChildOfClass("Animator")
+			if not animator then
+				animator = Instance.new("Animator")
+				animator.Parent = humanoid
+			end
+			local animation = Instance.new("Animation")
+			animation.AnimationId = WALK_ANIMATION
+			local track = animator:LoadAnimation(animation)
+			track.Priority = Enum.AnimationPriority.Movement
+			humanoid.Running:Connect(function(speed)
+				if speed > 0.5 then
+					if not track.IsPlaying then
+						track:Play(0.15)
+					end
+					track:AdjustSpeed(speed / 14)
+				elseif track.IsPlaying then
+					track:Stop(0.2)
+				end
+			end)
+		end)
+	end
+
 	humanoid.MaxHealth = math.huge
 	humanoid.Health = math.huge
 	humanoid.BreakJointsOnDeath = false
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-	humanoid.Parent = model
 
-	model.PrimaryPart = root
-
+	local head = model:FindFirstChild("Head") or root
 	Util.billboard(head, displayName, {
 		size = UDim2.fromOffset(140, 30),
 		offsetY = 1.6,

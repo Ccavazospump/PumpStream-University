@@ -1,17 +1,26 @@
 --[[
 	PlotBuilder
 	-----------
-	Builds all the physical parts of a plot: floor, store walls, counter,
-	claim pad, department shelves and upgrade pads. Pure construction —
-	game logic (claiming, buying, customers) lives in PlotManager.
+	Builds all the physical parts of a plot: floor, an EXPANDABLE store
+	shell (3 sizes — see GameConfig.Expansions), checkout counter, claim
+	pad, aisle-style departments, spread-out upgrade pads, and a returns
+	bin. Pure construction — game logic lives in PlotManager.
 
 	Every plot is built relative to an origin CFrame. The storefront
-	faces +Z: customers spawn at the street (+Z edge) and walk in.
+	faces +Z; the front wall and door NEVER move when the store expands,
+	so customer paths stay stable.
+
+	Layout (plot-local coords):
+	  door           (0, 5)      counter      x -28..-4 at z = -8
+	  returns bin    (-31.5, -1) register     (-8, -8)
+	  upgrade spots  economy (12, -2) / staff (18, -2), near the door
+	  departments    aisle zones on a grid; see GameConfig.Sections
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local Util = require(script.Parent.Util)
+local ItemVisuals = require(script.Parent.ItemVisuals)
 
 local PlotBuilder = {}
 
@@ -21,8 +30,8 @@ local WALL_HEIGHT = 14
 local COLORS = {
 	Pavement = Color3.fromRGB(170, 172, 178),
 	StoreFloor = Color3.fromRGB(224, 226, 232),
-	FloorAccent = Color3.fromRGB(78, 182, 164), -- teal border stripe
-	Wall = Color3.fromRGB(206, 86, 78), -- friendly grocery red (smooth, not brick)
+	FloorAccent = Color3.fromRGB(78, 182, 164),
+	Wall = Color3.fromRGB(206, 86, 78),
 	WallTrim = Color3.fromRGB(250, 250, 248),
 	AwningStripe = Color3.fromRGB(250, 250, 248),
 	Counter = Color3.fromRGB(146, 102, 70),
@@ -31,33 +40,153 @@ local COLORS = {
 	Light = Color3.fromRGB(255, 250, 235),
 	ClaimPad = Color3.fromRGB(88, 226, 128),
 	PadAvailable = Color3.fromRGB(255, 200, 60),
-	PadOwned = Color3.fromRGB(80, 200, 110),
-	PadLocked = Color3.fromRGB(120, 122, 130),
+	ReturnsBin = Color3.fromRGB(78, 182, 164),
 }
 
--- Builds one department (floor mat, sign, one stocked shelf per item).
--- Returns the shelves so the caller can hook up their pickup prompts.
-function PlotBuilder.buildSection(plot, section)
+-- fixed pad spots for the two chains that live near the door
+local CHAIN_SLOTS = {
+	economy = { 12, -2 },
+	staff = { 18, -2 },
+}
+
+-- ========================= Expandable shell ==========================
+
+-- (Re)build walls, floors, trim, lights, sign, awning for an expansion
+-- level. Called on plot creation (level 1) and on each expansion.
+function PlotBuilder.buildShell(plot, level)
 	local origin = plot.origin
-	local offset = section.offset
+	local bounds = GameConfig.Expansions[level]
+	local hw, backZ = bounds.halfWidth, bounds.backZ
+	local model = plot.shellFolder
+
+	model:ClearAllChildren()
+	plot.expansionLevel = level
+
+	local interiorDepth = 5 - backZ
+	local centerZ = (5 + backZ) / 2
+	local wallY = GROUND + WALL_HEIGHT / 2
+	local WALL_MAT = Enum.Material.SmoothPlastic
+
+	-- floors
+	Util.part({
+		Name = "FloorAccent",
+		Size = Vector3.new(hw * 2 + 4, 0.2, interiorDepth + 4),
+		CFrame = origin * CFrame.new(0, GROUND + 0.02, centerZ),
+		Color = COLORS.FloorAccent,
+		Parent = model,
+	})
+	Util.part({
+		Name = "StoreFloor",
+		Size = Vector3.new(hw * 2, 0.2, interiorDepth),
+		CFrame = origin * CFrame.new(0, GROUND + 0.05, centerZ),
+		Color = COLORS.StoreFloor,
+		Reflectance = 0.04,
+		Parent = model,
+	})
+
+	-- front wall segments leave a 14-stud door gap at x = 0
+	local frontSegment = (hw - 7) / 2 + 7 -- center x of each segment
+	local frontLength = hw - 7
+	Util.part({ Name = "FrontWallL", Size = Vector3.new(frontLength, WALL_HEIGHT, 1), CFrame = origin * CFrame.new(-frontSegment, wallY, 5), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
+	Util.part({ Name = "FrontWallR", Size = Vector3.new(frontLength, WALL_HEIGHT, 1), CFrame = origin * CFrame.new(frontSegment, wallY, 5), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
+	Util.part({ Name = "DoorHeader", Size = Vector3.new(14, 4, 1), CFrame = origin * CFrame.new(0, GROUND + WALL_HEIGHT - 2, 5), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
+	Util.part({ Name = "SideWallL", Size = Vector3.new(1, WALL_HEIGHT, interiorDepth), CFrame = origin * CFrame.new(-hw, wallY, centerZ), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
+	Util.part({ Name = "SideWallR", Size = Vector3.new(1, WALL_HEIGHT, interiorDepth), CFrame = origin * CFrame.new(hw, wallY, centerZ), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
+	Util.part({ Name = "BackWall", Size = Vector3.new(hw * 2, WALL_HEIGHT, 1), CFrame = origin * CFrame.new(0, wallY, backZ), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
+
+	-- white roof trim + interior baseboards for a finished look
+	local topY = GROUND + WALL_HEIGHT
+	Util.part({ Name = "Trim", Size = Vector3.new(hw * 2 + 2, 1, 1.4), CFrame = origin * CFrame.new(0, topY, 5), Color = COLORS.WallTrim, Parent = model })
+	Util.part({ Name = "Trim", Size = Vector3.new(hw * 2 + 2, 1, 1.4), CFrame = origin * CFrame.new(0, topY, backZ), Color = COLORS.WallTrim, Parent = model })
+	Util.part({ Name = "Trim", Size = Vector3.new(1.4, 1, interiorDepth + 2), CFrame = origin * CFrame.new(-hw, topY, centerZ), Color = COLORS.WallTrim, Parent = model })
+	Util.part({ Name = "Trim", Size = Vector3.new(1.4, 1, interiorDepth + 2), CFrame = origin * CFrame.new(hw, topY, centerZ), Color = COLORS.WallTrim, Parent = model })
+	Util.part({ Name = "Baseboard", Size = Vector3.new(hw * 2, 1, 0.4), CFrame = origin * CFrame.new(0, GROUND + 0.6, backZ + 0.6), Color = COLORS.WallTrim, Parent = model })
+	Util.part({ Name = "Baseboard", Size = Vector3.new(0.4, 1, interiorDepth), CFrame = origin * CFrame.new(-hw + 0.6, GROUND + 0.6, centerZ), Color = COLORS.WallTrim, Parent = model })
+	Util.part({ Name = "Baseboard", Size = Vector3.new(0.4, 1, interiorDepth), CFrame = origin * CFrame.new(hw - 0.6, GROUND + 0.6, centerZ), Color = COLORS.WallTrim, Parent = model })
+
+	-- ceiling light strips in a grid that scales with the store
+	for _, x in ipairs({ -(hw - 16), 0, hw - 16 }) do
+		local z = -8
+		while z > backZ + 6 do
+			local fixture = Util.part({
+				Name = "LightFixture",
+				Size = Vector3.new(8, 0.4, 3),
+				CFrame = origin * CFrame.new(x, topY - 1.5, z),
+				Color = COLORS.Light,
+				Material = Enum.Material.Neon,
+				Parent = model,
+			})
+			local light = Instance.new("PointLight")
+			light.Brightness = 0.45
+			light.Range = 16
+			light.Color = COLORS.Light
+			light.Parent = fixture
+			z -= 18
+		end
+	end
+
+	-- striped entrance awning
+	for i = 0, 6 do
+		Util.part({
+			Name = "Awning",
+			Size = Vector3.new(2, 0.4, 5),
+			CFrame = origin * CFrame.new(-6 + i * 2, GROUND + WALL_HEIGHT - 4.5, 8)
+				* CFrame.Angles(math.rad(-28), 0, 0),
+			Color = (i % 2 == 0) and COLORS.Wall or COLORS.AwningStripe,
+			Material = Enum.Material.Fabric,
+			Parent = model,
+		})
+	end
+
+	-- welcome mat
+	Util.part({
+		Name = "WelcomeMat",
+		Size = Vector3.new(12, 0.12, 5),
+		CFrame = origin * CFrame.new(0, GROUND + 0.16, 8),
+		Color = COLORS.FloorAccent,
+		Material = Enum.Material.Fabric,
+		Parent = model,
+	})
+
+	-- storefront sign (label recreated each rebuild; PlotManager re-titles it)
+	local storeSign = Util.part({
+		Name = "StoreSign",
+		Size = Vector3.new(30, 4.5, 1),
+		CFrame = origin * CFrame.new(0, GROUND + WALL_HEIGHT + 2.5, 5),
+		Color = COLORS.WallTrim,
+		Parent = model,
+	})
+	plot.ownerSignLabel = Util.surfaceSign(storeSign, Enum.NormalId.Back, plot.signText or ("FOR SALE — Store #" .. plot.index), Color3.fromRGB(206, 86, 78))
+end
+
+-- ========================== Departments ===============================
+
+-- Builds one department as a real aisle: two rows of three shelf units
+-- facing each other. Returns the shelves so PlotManager can wire prompts.
+function PlotBuilder.buildSection(plot, section)
+	local base = plot.origin * CFrame.new(section.offset.X, 0, section.offset.Z)
+	if section.rotated then
+		base = base * CFrame.Angles(0, math.rad(90), 0)
+	end
 
 	local folder = Instance.new("Folder")
 	folder.Name = section.id
 
-	-- colored floor mat
+	-- department floor mat (14 deep so there's a walkable corridor between zones)
 	Util.part({
 		Name = "Mat",
 		Size = Vector3.new(28, 0.2, 14),
-		CFrame = origin * CFrame.new(offset.X, GROUND + 0.11, offset.Z),
+		CFrame = base * CFrame.new(0, GROUND + 0.11, 0),
 		Color = section.color,
+		Transparency = 0.25,
 		Parent = folder,
 	})
 
-	-- hanging department sign
+	-- hanging department sign over the aisle
 	local sign = Util.part({
 		Name = "Sign",
-		Size = Vector3.new(12, 2.5, 0.6),
-		CFrame = origin * CFrame.new(offset.X, GROUND + 11, offset.Z - 3),
+		Size = Vector3.new(14, 2.5, 0.6),
+		CFrame = base * CFrame.new(0, GROUND + 11, 0),
 		Color = section.color,
 		Parent = folder,
 	})
@@ -67,43 +196,41 @@ function PlotBuilder.buildSection(plot, section)
 	local shelves = {}
 	for index, itemId in ipairs(section.items) do
 		local item = GameConfig.Items[itemId]
-		local x = offset.X + (index - (#section.items + 1) / 2) * 6.5
-		local shelfZ = offset.Z - 3
+		-- two rows of three: row A (index 1-3) at z -4.5, row B at +4.5
+		local row = (index <= 3) and -1 or 1
+		local col = ((index - 1) % 3) - 1 -- -1, 0, 1
+		local x = col * 8.5
+		local z = row * 4.5
+		local shelfCF = base * CFrame.new(x, 0, z)
 
-		-- tidy shelf cabinet (the base unit)
 		local stand = Util.part({
 			Name = itemId .. "Shelf",
-			Size = Vector3.new(5.4, 3, 2.6),
-			CFrame = origin * CFrame.new(x, GROUND + 1.5, shelfZ),
+			Size = Vector3.new(6, 3, 2.6),
+			CFrame = shelfCF * CFrame.new(0, GROUND + 1.5, 0),
 			Color = COLORS.Shelf,
-			Material = Enum.Material.SmoothPlastic,
 			Parent = folder,
 		})
 
-		-- department-colored header board behind the bin, tying the row together
+		-- department-colored header board on the back of the unit
 		Util.part({
 			Name = "ShelfHeader",
-			Size = Vector3.new(5.4, 1.6, 0.4),
-			CFrame = origin * CFrame.new(x, GROUND + 3.8, shelfZ - 1.1),
+			Size = Vector3.new(6, 1.6, 0.4),
+			CFrame = shelfCF * CFrame.new(0, GROUND + 3.8, 1.1 * row),
 			Color = section.color,
 			Parent = folder,
 		})
 
-		-- a neat product bin sitting in the cabinet
-		Util.part({
-			Name = "Bin",
-			Size = Vector3.new(4.6, 1.4, 2),
-			CFrame = origin * CFrame.new(x, GROUND + 3.7, shelfZ),
-			Color = item.color,
-			Material = Enum.Material.SmoothPlastic,
-			Parent = folder,
-		})
+		-- two product models sitting on top (real shapes, not cubes)
+		for _, side in ipairs({ -1.4, 1.4 }) do
+			local display = ItemVisuals.buildModel(itemId, { anchored = true, scale = 0.9 })
+			display:PivotTo(shelfCF * CFrame.new(side, GROUND + 3.8, -0.4 * row) * CFrame.Angles(0, math.rad(math.random(-30, 30)), 0))
+			display.Parent = folder
+		end
 
-		-- compact price tag: billboards always face the camera (never backwards),
-		-- and the short range means only the shelf you're near shows its tag
+		-- compact price tag, short range so only nearby shelves show
 		Util.billboard(stand, string.format("%s  $%d", item.name, item.price), {
-			size = UDim2.fromOffset(92, 24),
-			offsetY = 2.5,
+			size = UDim2.fromOffset(96, 24),
+			offsetY = 2.6,
 			maxDistance = 24,
 			backgroundTransparency = 0.25,
 		})
@@ -112,12 +239,12 @@ function PlotBuilder.buildSection(plot, section)
 		prompt.ActionText = "Take " .. item.name
 		prompt.ObjectText = section.name
 		prompt.HoldDuration = 0.35
-		prompt.MaxActivationDistance = 9
+		prompt.MaxActivationDistance = 8
 		prompt.RequiresLineOfSight = false
 		prompt.Parent = stand
 
-		-- where staff NPCs stand to grab this item
-		plot.shelfPositions[itemId] = (origin * CFrame.new(x, GROUND + 2, shelfZ + 3.5)).Position
+		-- where staff NPCs stand: in the aisle, in front of this unit
+		plot.shelfPositions[itemId] = (shelfCF * CFrame.new(0, GROUND + 2, -2.6 * row)).Position
 
 		table.insert(shelves, { itemId = itemId, prompt = prompt })
 	end
@@ -126,45 +253,43 @@ function PlotBuilder.buildSection(plot, section)
 	return shelves
 end
 
--- One buy-pad per upgrade, arranged in rows in the front-right of the store.
+-- ========================== Upgrade pads ==============================
+
+local function padPosition(upgrade)
+	if upgrade.padAt then
+		return upgrade.padAt[1], upgrade.padAt[2]
+	end
+	local slot = CHAIN_SLOTS[upgrade.slot or "economy"]
+	return slot[1], slot[2]
+end
+
 local function buildUpgradePads(plot)
 	local origin = plot.origin
-
-	local boardSign = Util.part({
-		Name = "UpgradeBoard",
-		Size = Vector3.new(14, 2.5, 0.6),
-		CFrame = origin * CFrame.new(28, GROUND + 11, 2),
-		Color = Color3.fromRGB(50, 50, 60),
-		Parent = plot.model,
-	})
-	Util.surfaceSign(boardSign, Enum.NormalId.Front, "UPGRADES")
-
-	for index, upgrade in ipairs(GameConfig.Upgrades) do
-		local row = math.floor((index - 1) / 6)
-		local col = (index - 1) % 6
-		local x = 14 + col * 5.5
-		local z = -2 - row * 7
-
+	for _, upgrade in ipairs(GameConfig.Upgrades) do
+		local x, z = padPosition(upgrade)
 		local pad = Util.part({
 			Name = "Pad_" .. upgrade.id,
 			Shape = Enum.PartType.Cylinder,
-			Size = Vector3.new(0.4, 4.4, 4.4),
+			Size = Vector3.new(0.4, 5, 5),
 			CFrame = origin * CFrame.new(x, GROUND + 0.2, z) * CFrame.Angles(0, 0, math.rad(90)),
-			Color = COLORS.PadLocked,
+			Color = COLORS.PadAvailable,
+			Material = Enum.Material.Neon,
+			Transparency = 1,
 			Parent = plot.model,
 		})
 
 		local label = Util.billboard(pad, upgrade.name, {
-			size = UDim2.fromOffset(150, 66),
-			offsetY = 3.2,
-			maxDistance = 40,
+			size = UDim2.fromOffset(160, 72),
+			offsetY = 3.4,
+			maxDistance = 60,
 		})
+		label:FindFirstAncestorOfClass("BillboardGui").Enabled = false
 
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Buy"
 		prompt.ObjectText = upgrade.name
 		prompt.HoldDuration = 0.5
-		prompt.MaxActivationDistance = 7
+		prompt.MaxActivationDistance = 8
 		prompt.RequiresLineOfSight = false
 		prompt.Enabled = false
 		prompt.Parent = pad
@@ -173,107 +298,28 @@ local function buildUpgradePads(plot)
 	end
 end
 
--- Refresh every pad's color/label/prompt for the current ownership state.
--- ownedSet is a { [upgradeId] = true } map; pass nil for an unclaimed plot.
+-- Tycoon-style sequential visibility: a pad is shown ONLY when it's the
+-- next thing in its chain (prereq owned, not yet owned). ownedSet nil =
+-- unclaimed plot = everything hidden.
 function PlotBuilder.refreshUpgradePads(plot, ownedSet)
 	for _, upgrade in ipairs(GameConfig.Upgrades) do
 		local entry = plot.padByUpgrade[upgrade.id]
 		if entry then
-			if not ownedSet then
-				entry.pad.Color = COLORS.PadLocked
-				entry.label.Text = upgrade.name
-				entry.prompt.Enabled = false
-			elseif ownedSet[upgrade.id] then
-				entry.pad.Color = COLORS.PadOwned
-				entry.label.Text = upgrade.name .. "\nOWNED ✓"
-				entry.prompt.Enabled = false
-			elseif upgrade.requires and not ownedSet[upgrade.requires] then
-				local required = GameConfig.getUpgrade(upgrade.requires)
-				entry.pad.Color = COLORS.PadLocked
-				entry.label.Text = string.format("%s\n🔒 Needs: %s", upgrade.name, required and required.name or upgrade.requires)
-				entry.prompt.Enabled = false
-			else
-				entry.pad.Color = COLORS.PadAvailable
-				entry.label.Text = string.format("%s\n%s\n$%d", upgrade.name, upgrade.desc or "", upgrade.cost)
-				entry.prompt.Enabled = true
+			local available = ownedSet ~= nil
+				and not ownedSet[upgrade.id]
+				and (upgrade.requires == nil or ownedSet[upgrade.requires])
+			entry.pad.Transparency = available and 0.15 or 1
+			entry.prompt.Enabled = available
+			entry.label:FindFirstAncestorOfClass("BillboardGui").Enabled = available
+			if available then
+				entry.label.Text = string.format("⭐ %s\n%s\n$%d", upgrade.name, upgrade.desc or "", upgrade.cost)
 			end
 		end
 	end
 end
 
--- Decorative extras that don't affect gameplay: roof-line trim, a striped
--- entrance awning, hanging light fixtures (no solid roof, so you can still
--- see into the store from above), and a welcome mat.
-local function buildDecorations(plot)
-	local origin = plot.origin
-	local topY = GROUND + WALL_HEIGHT
+-- ============================ Full plot ===============================
 
-	-- white trim band capping every wall for a finished edge
-	local trims = {
-		{ Size = Vector3.new(92, 1, 1.4), Pos = Vector3.new(0, topY, 5) },
-		{ Size = Vector3.new(92, 1, 1.4), Pos = Vector3.new(0, topY, -55) },
-		{ Size = Vector3.new(1.4, 1, 62), Pos = Vector3.new(-45, topY, -25) },
-		{ Size = Vector3.new(1.4, 1, 62), Pos = Vector3.new(45, topY, -25) },
-	}
-	for _, trim in ipairs(trims) do
-		Util.part({
-			Name = "RoofTrim",
-			Size = trim.Size,
-			CFrame = origin * CFrame.new(trim.Pos.X, trim.Pos.Y, trim.Pos.Z),
-			Color = COLORS.WallTrim,
-			Parent = plot.model,
-		})
-	end
-
-	-- striped awning over the entrance (alternating red/white slats)
-	for i = 0, 6 do
-		local stripeColor = (i % 2 == 0) and COLORS.Wall or COLORS.AwningStripe
-		Util.part({
-			Name = "Awning",
-			Size = Vector3.new(2, 0.4, 5),
-			CFrame = origin * CFrame.new(-6 + i * 2, GROUND + WALL_HEIGHT - 4.5, 8)
-				* CFrame.Angles(math.rad(-28), 0, 0),
-			Color = stripeColor,
-			Material = Enum.Material.Fabric,
-			Parent = plot.model,
-		})
-	end
-
-	-- hanging light fixtures inside (neon panel + a warm PointLight each)
-	for _, pos in ipairs({
-		Vector3.new(-22, topY - 2, -20),
-		Vector3.new(22, topY - 2, -20),
-		Vector3.new(-22, topY - 2, -42),
-		Vector3.new(22, topY - 2, -42),
-		Vector3.new(0, topY - 2, -12),
-	}) do
-		local fixture = Util.part({
-			Name = "LightFixture",
-			Size = Vector3.new(10, 0.4, 3),
-			CFrame = origin * CFrame.new(pos.X, pos.Y, pos.Z),
-			Color = COLORS.Light,
-			Material = Enum.Material.Neon,
-			Parent = plot.model,
-		})
-		local light = Instance.new("PointLight")
-		light.Brightness = 0.45
-		light.Range = 16
-		light.Color = COLORS.Light
-		light.Parent = fixture
-	end
-
-	-- welcome mat at the door
-	Util.part({
-		Name = "WelcomeMat",
-		Size = Vector3.new(12, 0.12, 5),
-		CFrame = origin * CFrame.new(0, GROUND + 0.16, 8),
-		Color = COLORS.FloorAccent,
-		Material = Enum.Material.Fabric,
-		Parent = plot.model,
-	})
-end
-
--- Build the full plot shell and return the plot state table.
 function PlotBuilder.build(origin, index)
 	local model = Instance.new("Model")
 	model.Name = "Plot" .. index
@@ -284,15 +330,17 @@ function PlotBuilder.build(origin, index)
 		model = model,
 		owner = nil,
 		generation = 0, -- bumped on claim/release so old NPC loops stop
+		expansionLevel = 1,
 		padByUpgrade = {},
-		shelfPositions = {}, -- itemId -> world Vector3 in front of the shelf
+		shelfPositions = {}, -- itemId -> world Vector3 in the aisle
 		customers = {},
 		staff = {},
+		signText = nil,
 	}
 
 	local size = GameConfig.Plot.Size
 
-	-- plot floor (parking lot / pavement)
+	-- plot ground (parking lot / street)
 	Util.part({
 		Name = "Floor",
 		Size = Vector3.new(size, 1, size),
@@ -302,56 +350,24 @@ function PlotBuilder.build(origin, index)
 		Parent = model,
 	})
 
-	-- teal accent slab just under the floor, so its edge frames the store
-	Util.part({
-		Name = "FloorAccent",
-		Size = Vector3.new(94, 0.2, 64),
-		CFrame = origin * CFrame.new(0, GROUND + 0.02, -25),
-		Color = COLORS.FloorAccent,
-		Parent = model,
-	})
+	-- folders: shell rebuilds on expansion, sections build on unlock
+	local shellFolder = Instance.new("Folder")
+	shellFolder.Name = "Shell"
+	shellFolder.Parent = model
+	plot.shellFolder = shellFolder
 
-	-- store interior floor
-	Util.part({
-		Name = "StoreFloor",
-		Size = Vector3.new(90, 0.2, 60),
-		CFrame = origin * CFrame.new(0, GROUND + 0.05, -25),
-		Color = COLORS.StoreFloor,
-		Material = Enum.Material.SmoothPlastic,
-		Reflectance = 0.04,
-		Parent = model,
-	})
+	local sectionsFolder = Instance.new("Folder")
+	sectionsFolder.Name = "Sections"
+	sectionsFolder.Parent = model
+	plot.sectionsFolder = sectionsFolder
 
-	-- walls: front (with door gap), two sides, back — smooth for a clean look
-	local wallY = GROUND + WALL_HEIGHT / 2
-	local WALL_MAT = Enum.Material.SmoothPlastic
-	Util.part({ Name = "FrontWallL", Size = Vector3.new(38, WALL_HEIGHT, 1), CFrame = origin * CFrame.new(-26, wallY, 5), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
-	Util.part({ Name = "FrontWallR", Size = Vector3.new(38, WALL_HEIGHT, 1), CFrame = origin * CFrame.new(26, wallY, 5), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
-	Util.part({ Name = "DoorHeader", Size = Vector3.new(14, 4, 1), CFrame = origin * CFrame.new(0, GROUND + WALL_HEIGHT - 2, 5), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
-	Util.part({ Name = "SideWallL", Size = Vector3.new(1, WALL_HEIGHT, 60), CFrame = origin * CFrame.new(-45, wallY, -25), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
-	Util.part({ Name = "SideWallR", Size = Vector3.new(1, WALL_HEIGHT, 60), CFrame = origin * CFrame.new(45, wallY, -25), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
-	Util.part({ Name = "BackWall", Size = Vector3.new(90, WALL_HEIGHT, 1), CFrame = origin * CFrame.new(0, wallY, -55), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
+	PlotBuilder.buildShell(plot, 1)
 
-	-- white baseboard along the interior walls for a crisp, finished floor line
-	Util.part({ Name = "Baseboard", Size = Vector3.new(90, 1, 0.4), CFrame = origin * CFrame.new(0, GROUND + 0.6, -54.4), Color = COLORS.WallTrim, Parent = model })
-	Util.part({ Name = "Baseboard", Size = Vector3.new(0.4, 1, 60), CFrame = origin * CFrame.new(-44.4, GROUND + 0.6, -25), Color = COLORS.WallTrim, Parent = model })
-	Util.part({ Name = "Baseboard", Size = Vector3.new(0.4, 1, 60), CFrame = origin * CFrame.new(44.4, GROUND + 0.6, -25), Color = COLORS.WallTrim, Parent = model })
-
-	-- storefront sign above the door
-	local storeSign = Util.part({
-		Name = "StoreSign",
-		Size = Vector3.new(30, 4.5, 1),
-		CFrame = origin * CFrame.new(0, GROUND + WALL_HEIGHT + 2.5, 5),
-		Color = COLORS.WallTrim,
-		Parent = model,
-	})
-	plot.ownerSignLabel = Util.surfaceSign(storeSign, Enum.NormalId.Back, "FOR SALE — Store #" .. index, Color3.fromRGB(216, 90, 74))
-
-	-- checkout counter + register
+	-- checkout counter (front-left) + register
 	Util.part({
 		Name = "Counter",
 		Size = Vector3.new(24, 3, 3),
-		CFrame = origin * CFrame.new(0, GROUND + 1.5, -8),
+		CFrame = origin * CFrame.new(-16, GROUND + 1.5, -8),
 		Color = COLORS.Counter,
 		Material = Enum.Material.WoodPlanks,
 		Parent = model,
@@ -359,24 +375,45 @@ function PlotBuilder.build(origin, index)
 	Util.part({
 		Name = "CounterTop",
 		Size = Vector3.new(24.6, 0.4, 3.6),
-		CFrame = origin * CFrame.new(0, GROUND + 3.2, -8),
+		CFrame = origin * CFrame.new(-16, GROUND + 3.2, -8),
 		Color = COLORS.CounterTop,
-		Material = Enum.Material.SmoothPlastic,
 		Reflectance = 0.05,
 		Parent = model,
 	})
 	local register = Util.part({
 		Name = "Register",
 		Size = Vector3.new(2, 2, 2),
-		CFrame = origin * CFrame.new(8, GROUND + 4, -8),
+		CFrame = origin * CFrame.new(-8, GROUND + 4.2, -8),
 		Color = Color3.fromRGB(40, 40, 45),
 		Parent = model,
 	})
 	Util.billboard(register, "CHECKOUT", {
-		size = UDim2.fromOffset(120, 30),
-		offsetY = 2.2,
-		maxDistance = 50,
+		size = UDim2.fromOffset(110, 26),
+		offsetY = 2,
+		maxDistance = 35,
 	})
+
+	-- returns bin: put back wrongly-grabbed items
+	local returnsBin = Util.part({
+		Name = "ReturnsBin",
+		Size = Vector3.new(3, 3.4, 3),
+		CFrame = origin * CFrame.new(-31.5, GROUND + 1.7, -1),
+		Color = COLORS.ReturnsBin,
+		Parent = model,
+	})
+	Util.billboard(returnsBin, "↩️ RETURNS\nPut items back", {
+		size = UDim2.fromOffset(110, 40),
+		offsetY = 2.6,
+		maxDistance = 30,
+	})
+	local returnsPrompt = Instance.new("ProximityPrompt")
+	returnsPrompt.ActionText = "Put Back All Items"
+	returnsPrompt.ObjectText = "Returns Bin"
+	returnsPrompt.HoldDuration = 0.3
+	returnsPrompt.MaxActivationDistance = 8
+	returnsPrompt.RequiresLineOfSight = false
+	returnsPrompt.Parent = returnsBin
+	plot.returnsPrompt = returnsPrompt
 
 	-- claim pad out front
 	local claimPad = Util.part({
@@ -395,35 +432,27 @@ function PlotBuilder.build(origin, index)
 		maxDistance = 150,
 	})
 
-	-- folder that holds unlocked department builds
-	local sectionsFolder = Instance.new("Folder")
-	sectionsFolder.Name = "Sections"
-	sectionsFolder.Parent = model
-	plot.sectionsFolder = sectionsFolder
-
 	buildUpgradePads(plot)
-	buildDecorations(plot)
 
 	-- key walking positions (world space)
 	local function point(x, z)
 		return (origin * CFrame.new(x, GROUND + 3, z)).Position
 	end
 	plot.points = {
-		customerSpawn = point(0, 54),
+		customerSpawn = point(0, 55),
 		doorOutside = point(0, 12),
 		doorInside = point(0, 0),
-		shopperIdle = point(-18, -14), -- behind the counter, near the shelves
-		cashierIdle = point(0, -12), -- behind the counter
+		shopperIdle = point(2, -12), -- right end of the counter, inside
+		cashierIdle = point(-16, -12), -- behind the counter
 	}
 	-- queue slots along the front of the counter
 	plot.getQueueSlot = function(slotIndex)
-		local x = -10 + ((slotIndex - 1) % 6) * 4
+		local x = -26 + ((slotIndex - 1) % 8) * 4
 		return point(x, -3.5)
 	end
-	-- open floor at either end of the counter; NPCs route through these
-	-- so straight-line MoveTo doesn't walk them into the counter
+	-- open floor at either end of the counter; NPCs detour through these
 	plot.getCounterGap = function(side)
-		return point(side >= 0 and 17 or -17, -8)
+		return point(side >= 0 and 2 or -31.5, -8)
 	end
 
 	model.Parent = workspace
@@ -434,7 +463,7 @@ end
 function PlotBuilder.setClaimPadVisible(plot, visible)
 	plot.claimPad.Transparency = visible and 0 or 1
 	plot.claimPad.CanTouch = visible
-	plot.claimPad.CanCollide = visible -- customers walk right through where it was
+	plot.claimPad.CanCollide = visible
 	local gui = plot.claimLabel and plot.claimLabel:FindFirstAncestorOfClass("BillboardGui")
 	if gui then
 		gui.Enabled = visible
@@ -442,7 +471,10 @@ function PlotBuilder.setClaimPadVisible(plot, visible)
 end
 
 function PlotBuilder.setOwnerSign(plot, text)
-	plot.ownerSignLabel.Text = text
+	plot.signText = text
+	if plot.ownerSignLabel then
+		plot.ownerSignLabel.Text = text
+	end
 end
 
 -- Remove all built departments (called when a plot is released).

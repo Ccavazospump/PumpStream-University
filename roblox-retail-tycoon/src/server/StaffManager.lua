@@ -45,14 +45,20 @@ local function routeTo(plot, staff, targetPosition)
 	if not root then
 		return false
 	end
+	-- the counter spans x -28..-4 at z = -8; detour only when the straight
+	-- line would actually pass through it
 	local COUNTER_Z = -8
 	local localFrom = plot.origin:PointToObjectSpace(root.Position)
 	local localTo = plot.origin:PointToObjectSpace(targetPosition)
-	local crossesCounter = (localFrom.Z - COUNTER_Z) * (localTo.Z - COUNTER_Z) < 0
-	if crossesCounter then
-		local side = (localFrom.X + localTo.X) >= 0 and 1 or -1
-		if not Util.walkTo(staff.model, plot.getCounterGap(side)) then
-			return false
+	local crossesCounterLine = (localFrom.Z - COUNTER_Z) * (localTo.Z - COUNTER_Z) < 0
+	if crossesCounterLine then
+		local t = (COUNTER_Z - localFrom.Z) / (localTo.Z - localFrom.Z)
+		local crossX = localFrom.X + (localTo.X - localFrom.X) * t
+		if crossX > -30 and crossX < -2 then
+			local side = (crossX > -16) and 1 or -1
+			if not Util.walkTo(staff.model, plot.getCounterGap(side)) then
+				return false
+			end
 		end
 	end
 	return Util.walkTo(staff.model, targetPosition)
