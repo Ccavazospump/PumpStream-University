@@ -1,0 +1,149 @@
+--[[
+	Main (client entry point)
+	-------------------------
+	The HUD: cash display, carry counter, toast notifications, and a few
+	welcome tips for new players. All gameplay runs on the server.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local remotes = ReplicatedStorage:WaitForChild("Remotes")
+local notifyRemote = remotes:WaitForChild("Notify")
+
+-- ============================== HUD ==============================
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "RetailHUD"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local function styledFrame(size, position, anchor)
+	local frame = Instance.new("Frame")
+	frame.Size = size
+	frame.Position = position
+	frame.AnchorPoint = anchor or Vector2.new(0.5, 0)
+	frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+	frame.BackgroundTransparency = 0.25
+	frame.BorderSizePixel = 0
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 10)
+	corner.Parent = frame
+	frame.Parent = screenGui
+	return frame
+end
+
+local function styledLabel(parent, textSize)
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = textSize
+	label.Parent = parent
+	return label
+end
+
+-- cash (top center)
+local cashFrame = styledFrame(UDim2.fromOffset(190, 46), UDim2.new(0.5, 0, 0, 12))
+local cashLabel = styledLabel(cashFrame, 24)
+cashLabel.TextColor3 = Color3.fromRGB(140, 255, 160)
+
+-- carry counter (under the cash)
+local carryFrame = styledFrame(UDim2.fromOffset(130, 34), UDim2.new(0.5, 0, 0, 64))
+local carryLabel = styledLabel(carryFrame, 18)
+
+local function updateCash()
+	local leaderstats = player:FindFirstChild("leaderstats")
+	local cash = leaderstats and leaderstats:FindFirstChild("Cash")
+	cashLabel.Text = "💵 $" .. (cash and cash.Value or 0)
+end
+
+local function updateCarry()
+	local carrying = player:GetAttribute("Carrying") or 0
+	local capacity = player:GetAttribute("CarryCapacity") or 1
+	carryLabel.Text = string.format("🧺 %d / %d", carrying, capacity)
+end
+
+task.spawn(function()
+	local leaderstats = player:WaitForChild("leaderstats")
+	local cash = leaderstats:WaitForChild("Cash")
+	updateCash()
+	cash.Changed:Connect(updateCash)
+end)
+
+player:GetAttributeChangedSignal("Carrying"):Connect(updateCarry)
+player:GetAttributeChangedSignal("CarryCapacity"):Connect(updateCarry)
+updateCarry()
+
+-- ============================ Toasts =============================
+
+local toastContainer = Instance.new("Frame")
+toastContainer.Size = UDim2.new(0, 380, 0.4, 0)
+toastContainer.Position = UDim2.new(0.5, 0, 0.95, 0)
+toastContainer.AnchorPoint = Vector2.new(0.5, 1)
+toastContainer.BackgroundTransparency = 1
+toastContainer.Parent = screenGui
+
+local layout = Instance.new("UIListLayout")
+layout.FillDirection = Enum.FillDirection.Vertical
+layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.Padding = UDim.new(0, 6)
+layout.Parent = toastContainer
+
+local TOAST_COLORS = {
+	info = Color3.fromRGB(235, 235, 235),
+	success = Color3.fromRGB(140, 255, 160),
+	error = Color3.fromRGB(255, 130, 120),
+}
+
+local function showToast(text, kind)
+	local toast = Instance.new("TextLabel")
+	toast.Size = UDim2.new(1, 0, 0, 36)
+	toast.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+	toast.BackgroundTransparency = 0.2
+	toast.TextColor3 = TOAST_COLORS[kind] or TOAST_COLORS.info
+	toast.Font = Enum.Font.GothamMedium
+	toast.TextSize = 17
+	toast.TextWrapped = true
+	toast.Text = text
+	toast.TextTransparency = 0
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = toast
+	toast.Parent = toastContainer
+
+	task.delay(3.5, function()
+		local tween = TweenService:Create(toast, TweenInfo.new(0.5), {
+			TextTransparency = 1,
+			BackgroundTransparency = 1,
+		})
+		tween:Play()
+		tween.Completed:Wait()
+		toast:Destroy()
+	end)
+end
+
+notifyRemote.OnClientEvent:Connect(showToast)
+
+-- ========================= Welcome tips ==========================
+
+local TIPS = {
+	"🏪 Step on a glowing green pad to claim your store!",
+	"🛒 Customers order at the counter — grab their items from the shelves.",
+	"🤝 Walk back and use 'Hand Over Items', then 'Checkout' to get paid.",
+	"⭐ Spend your cash on the gold upgrade pads to grow your store!",
+}
+
+task.spawn(function()
+	task.wait(3)
+	for _, tip in ipairs(TIPS) do
+		showToast(tip, "info")
+		task.wait(4)
+	end
+end)
