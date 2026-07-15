@@ -198,6 +198,15 @@ function Util.createNPC(displayName, shirtColor, pantsColor)
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
 
+	-- NPCs walk through each other and through players (no more shoving
+	-- matches in the doorway or the register line) — see Main.server.lua
+	-- for the collision group setup
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.CollisionGroup = "NPC"
+		end
+	end
+
 	local head = model:FindFirstChild("Head") or root
 	Util.billboard(head, displayName, {
 		size = UDim2.fromOffset(140, 30),
@@ -301,15 +310,32 @@ function Util.pathWalkTo(model, position)
 			table.insert(points, raw[#raw].Position)
 		end
 
-		for _, point in ipairs(points) do
-			if not model.Parent then
+		-- Flow through corners: head for the next corner as soon as we're
+		-- CLOSE to the current one (instead of stopping exactly on it).
+		-- Only the final point requires a true arrival.
+		local root2 = model:FindFirstChild("HumanoidRootPart")
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		for index, point in ipairs(points) do
+			if not model.Parent or not humanoid then
 				return false
 			end
-			if not Util.walkTo(model, point, 8) then
-				return false
+			if index == #points then
+				if not Util.walkTo(model, point, 8) then
+					return false
+				end
+			else
+				humanoid:MoveTo(point)
+				local deadline = os.clock() + 8
+				while model.Parent and os.clock() < deadline do
+					local flat = Vector3.new(point.X - root2.Position.X, 0, point.Z - root2.Position.Z)
+					if flat.Magnitude < 3.5 then
+						break -- close enough, flow into the next corner
+					end
+					task.wait()
+				end
 			end
 		end
-		return true
+		return model.Parent ~= nil
 	end
 	return Util.walkTo(model, position)
 end

@@ -77,6 +77,29 @@ Progress (cash + upgrades) saves with DataStores. In Studio:
    customers, and eventually hire a **Personal Shopper** and **Cashier** so
    the store runs itself.
 
+## Making it look good (no code needed!)
+
+The code builds *functional* stores out of basic parts. The real visual
+glow-up comes from **3D models**, and that part is all yours in Studio:
+
+1. **Toolbox models** — View → Toolbox, search for e.g. "grocery shelf",
+   "cash register", "supermarket". Insert one you like.
+   ⚠️ **Always check inside inserted models and DELETE any `Script`
+   objects** — free models sometimes hide malicious scripts.
+2. **Auto-use hooks** — create a Folder named `Assets` in
+   `ReplicatedStorage`, and the game will automatically use your models
+   instead of the blocky ones for anything named:
+   - `ShelfUnit` — used for every shelf in every department
+   - `Register` — used for the checkout register
+   Requirements: it must be a **Model** with a **PrimaryPart** set, and
+   its pivot should be at the bottom-center (Model tab → Pivot tools).
+3. **Everything outside the plots is yours** — roads, trees, terrain,
+   parking lots, a skybox: build them directly in Studio; the game code
+   never touches anything outside the plots it generates.
+
+Want more hooks (counter, doors, curbside signs, customer outfits)? Ask —
+each is a couple of lines.
+
 ## Project layout
 
 ```

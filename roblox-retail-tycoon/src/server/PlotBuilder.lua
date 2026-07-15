@@ -27,6 +27,18 @@ local PlotBuilder = {}
 local GROUND = 0.5 -- top surface of the plot floor
 local WALL_HEIGHT = 14
 
+-- Optional pretty-model hooks: drop a Model named "ShelfUnit" or
+-- "Register" into ReplicatedStorage/Assets (set its PrimaryPart, pivot at
+-- bottom-center) and it will be used instead of the built-in blocky look.
+local function getTemplate(name)
+	local assets = ReplicatedStorage:FindFirstChild("Assets")
+	local template = assets and assets:FindFirstChild(name)
+	if template and template:IsA("Model") then
+		return template
+	end
+	return nil
+end
+
 local COLORS = {
 	Pavement = Color3.fromRGB(170, 172, 178),
 	StoreFloor = Color3.fromRGB(224, 226, 232),
@@ -204,22 +216,33 @@ function PlotBuilder.buildSection(plot, section)
 		local z = row * 4.5
 		local shelfCF = base * CFrame.new(x, 0, z)
 
-		local stand = Util.part({
-			Name = itemId .. "Shelf",
-			Size = Vector3.new(6, 3, 2.6),
-			CFrame = shelfCF * CFrame.new(0, GROUND + 1.5, 0),
-			Color = COLORS.Shelf,
-			Parent = folder,
-		})
+		-- your pretty model if provided, otherwise the built-in blocky unit
+		local stand
+		local shelfTemplate = getTemplate("ShelfUnit")
+		if shelfTemplate then
+			local unit = shelfTemplate:Clone()
+			unit.Name = itemId .. "Shelf"
+			unit:PivotTo(shelfCF * CFrame.new(0, GROUND, 0) * CFrame.Angles(0, row == 1 and math.rad(180) or 0, 0))
+			unit.Parent = folder
+			stand = unit.PrimaryPart or unit:FindFirstChildWhichIsA("BasePart")
+		else
+			stand = Util.part({
+				Name = itemId .. "Shelf",
+				Size = Vector3.new(6, 3, 2.6),
+				CFrame = shelfCF * CFrame.new(0, GROUND + 1.5, 0),
+				Color = COLORS.Shelf,
+				Parent = folder,
+			})
 
-		-- department-colored header board on the back of the unit
-		Util.part({
-			Name = "ShelfHeader",
-			Size = Vector3.new(6, 1.6, 0.4),
-			CFrame = shelfCF * CFrame.new(0, GROUND + 3.8, 1.1 * row),
-			Color = section.color,
-			Parent = folder,
-		})
+			-- department-colored header board on the back of the unit
+			Util.part({
+				Name = "ShelfHeader",
+				Size = Vector3.new(6, 1.6, 0.4),
+				CFrame = shelfCF * CFrame.new(0, GROUND + 3.8, 1.1 * row),
+				Color = section.color,
+				Parent = folder,
+			})
+		end
 
 		-- two product models sitting on top (real shapes, not cubes)
 		for _, side in ipairs({ -1.4, 1.4 }) do
@@ -411,28 +434,69 @@ function PlotBuilder.build(origin, index)
 	})
 
 	-- a register that looks like a register: base + angled screen + keypad
-	local registerBase = Util.part({
-		Name = "Register",
-		Size = Vector3.new(2.4, 1, 2.4),
-		CFrame = origin * CFrame.new(-8, GROUND + 3.9, -8),
-		Color = Color3.fromRGB(60, 62, 70),
-		Parent = model,
-	})
-	local screen = Util.part({
-		Name = "RegisterScreen",
-		Size = Vector3.new(2.2, 1.8, 0.2),
-		CFrame = origin * CFrame.new(-8, GROUND + 5.4, -8.4) * CFrame.Angles(math.rad(-12), 0, 0),
-		Color = Color3.fromRGB(22, 24, 30),
-		Parent = model,
-	})
-	plot.registerDisplay = Util.surfaceSign(screen, Enum.NormalId.Front, "REGISTER\nREADY", Color3.fromRGB(120, 255, 170))
-	Util.part({
-		Name = "Keypad",
-		Size = Vector3.new(1.6, 0.25, 1.2),
-		CFrame = origin * CFrame.new(-8, GROUND + 4.5, -7.2) * CFrame.Angles(math.rad(8), 0, 0),
-		Color = Color3.fromRGB(200, 202, 208),
-		Parent = model,
-	})
+	-- (or YOUR model, if ReplicatedStorage/Assets/Register exists)
+	local registerBase
+	local registerTemplate = getTemplate("Register")
+	if registerTemplate then
+		local custom = registerTemplate:Clone()
+		custom.Name = "Register"
+		custom:PivotTo(origin * CFrame.new(-8, GROUND, -8))
+		custom.Parent = model
+		registerBase = custom.PrimaryPart or custom:FindFirstChildWhichIsA("BasePart")
+		plot.registerDisplay = Util.billboard(registerBase, "REGISTER READY", {
+			size = UDim2.fromOffset(120, 44),
+			offsetY = 4,
+			maxDistance = 35,
+			textColor = Color3.fromRGB(120, 255, 170),
+		})
+		plot.registerDrawer = nil -- custom models handle their own look
+	else
+		registerBase = Util.part({
+			Name = "Register",
+			Size = Vector3.new(2.4, 1, 2.4),
+			CFrame = origin * CFrame.new(-8, GROUND + 3.9, -8),
+			Color = Color3.fromRGB(60, 62, 70),
+			Parent = model,
+		})
+		local screen = Util.part({
+			Name = "RegisterScreen",
+			Size = Vector3.new(2.2, 1.8, 0.2),
+			CFrame = origin * CFrame.new(-8, GROUND + 5.4, -8.4) * CFrame.Angles(math.rad(-12), 0, 0),
+			Color = Color3.fromRGB(22, 24, 30),
+			Parent = model,
+		})
+		plot.registerDisplay = Util.surfaceSign(screen, Enum.NormalId.Front, "REGISTER\nREADY", Color3.fromRGB(120, 255, 170))
+		Util.part({
+			Name = "Keypad",
+			Size = Vector3.new(1.6, 0.25, 1.2),
+			CFrame = origin * CFrame.new(-8, GROUND + 4.5, -7.2) * CFrame.Angles(math.rad(8), 0, 0),
+			Color = Color3.fromRGB(200, 202, 208),
+			Parent = model,
+		})
+
+		-- cash drawer that pops open when you take payment
+		local drawer = Util.part({
+			Name = "CashDrawer",
+			Size = Vector3.new(2.0, 0.6, 1.6),
+			CFrame = origin * CFrame.new(-8, GROUND + 3.5, -8),
+			Color = Color3.fromRGB(90, 92, 100),
+			Material = Enum.Material.Metal,
+			Parent = model,
+		})
+		local cash = Util.part({
+			Name = "DrawerCash",
+			Size = Vector3.new(1.6, 0.15, 1.2),
+			CFrame = origin * CFrame.new(-8, GROUND + 3.85, -8),
+			Color = Color3.fromRGB(110, 190, 110),
+			Parent = model,
+		})
+		plot.registerDrawer = {
+			drawer = drawer,
+			cash = cash,
+			drawerClosed = drawer.CFrame,
+			cashClosed = cash.CFrame,
+		}
+	end
 
 	-- scanning happens HERE: quick E taps, one per item
 	local registerPrompt = Instance.new("ProximityPrompt")

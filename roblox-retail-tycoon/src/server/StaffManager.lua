@@ -69,8 +69,11 @@ local function cashierLoop(plot, staff, generation)
 	Util.pathWalkTo(staff.model, plot.points.cashierIdle)
 	while plot.generation == generation and staff.model.Parent do
 		local customer = plot.beltCustomer
-		if customer and customer.beltItems and #customer.beltItems > 0 and not customer.paid then
-			task.wait(0.9) -- scans slower than a skilled player
+		local hasWork = customer
+			and not customer.paid
+			and (customer.readyToPay or (customer.beltItems and #customer.beltItems > 0))
+		if hasWork then
+			task.wait(customer.readyToPay and 1.1 or 0.9) -- scans slower than a skilled player
 			if plot.generation == generation then
 				CustomerManager.scanAtRegister(plot, nil)
 			end

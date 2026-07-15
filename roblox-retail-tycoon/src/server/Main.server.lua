@@ -6,7 +6,30 @@
 ]]
 
 local Players = game:GetService("Players")
+local PhysicsService = game:GetService("PhysicsService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- NPCs collide with the world but pass through each other and players,
+-- so lines and doorways never turn into shoving matches.
+pcall(function()
+	PhysicsService:RegisterCollisionGroup("NPC")
+	PhysicsService:RegisterCollisionGroup("Player")
+	PhysicsService:CollisionGroupSetCollidable("NPC", "NPC", false)
+	PhysicsService:CollisionGroupSetCollidable("NPC", "Player", false)
+end)
+
+local function assignPlayerCollisionGroup(character)
+	for _, part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.CollisionGroup = "Player"
+		end
+	end
+	character.DescendantAdded:Connect(function(descendant)
+		if descendant:IsA("BasePart") then
+			descendant.CollisionGroup = "Player"
+		end
+	end)
+end
 
 -- Remotes must exist before any module tries to use them
 local remotes = Instance.new("Folder")
@@ -61,8 +84,9 @@ Players.PlayerAdded:Connect(function(player)
 	player:SetAttribute("CarryCapacity", GameConfig.BaseCarryCapacity)
 	player:SetAttribute("Carrying", 0)
 
-	-- dropped items don't survive death
 	player.CharacterAdded:Connect(function(character)
+		assignPlayerCollisionGroup(character)
+		-- dropped items don't survive death
 		local humanoid = character:WaitForChild("Humanoid", 5)
 		if humanoid then
 			humanoid.Died:Connect(function()

@@ -230,6 +230,9 @@ local function loadBelt(plot, customer)
 		end
 	end
 	customer.billboard.Text = "🛒 Unloading the belt..."
+	if plot.registerPrompt then
+		plot.registerPrompt.ActionText = "Scan Item"
+	end
 	setRegisterDisplay(plot, string.format("%d ITEMS\n$0", count))
 end
 
@@ -244,7 +247,56 @@ local function clearBelt(plot)
 		customer.beltItems = nil
 	end
 	plot.beltCustomer = nil
+	if plot.registerPrompt then
+		plot.registerPrompt.ActionText = "Scan Item"
+	end
 	setRegisterDisplay(plot, "REGISTER\nREADY")
+end
+
+-- The cash drawer pops open, then slides shut again.
+local function popDrawer(plot)
+	local drawerInfo = plot.registerDrawer
+	if not drawerInfo then
+		return
+	end
+	task.spawn(function()
+		local open = CFrame.new(0, 0, -1.3)
+		for step = 1, 6 do
+			local alpha = step / 6
+			drawerInfo.drawer.CFrame = drawerInfo.drawerClosed:Lerp(drawerInfo.drawerClosed * open, alpha)
+			drawerInfo.cash.CFrame = drawerInfo.cashClosed:Lerp(drawerInfo.cashClosed * open, alpha)
+			task.wait(0.02)
+		end
+		task.wait(0.9)
+		for step = 1, 6 do
+			local alpha = 1 - step / 6
+			drawerInfo.drawer.CFrame = drawerInfo.drawerClosed:Lerp(drawerInfo.drawerClosed * open, alpha)
+			drawerInfo.cash.CFrame = drawerInfo.cashClosed:Lerp(drawerInfo.cashClosed * open, alpha)
+			task.wait(0.02)
+		end
+	end)
+end
+
+-- Final beat of the checkout: take the money, drawer pops, thanks + hop.
+local function takePayment(plot, customer)
+	customer.paid = true
+	customer.state = "Paid"
+	popDrawer(plot)
+	payOwner(plot, customer, 1, 0, "sale")
+	setRegisterDisplay(plot, string.format("$%d\nPAID ✓", customer.subtotal))
+	customer.billboard.Text = THANKS_PHRASES[math.random(#THANKS_PHRASES)]
+	customer.billboard.TextColor3 = Color3.fromRGB(140, 255, 160)
+	if customer.humanoid then
+		customer.humanoid.Jump = true -- a happy hop
+	end
+	if plot.registerPrompt then
+		plot.registerPrompt.ActionText = "Scan Item"
+	end
+	task.delay(1.2, function()
+		if plot.beltCustomer == customer then
+			clearBelt(plot)
+		end
+	end)
 end
 
 -- Scan ONE item off the belt. Tap after tap until the order is rung up —
@@ -255,13 +307,22 @@ function CustomerManager.scanAtRegister(plot, byPlayer)
 		return false
 	end
 	local customer = plot.beltCustomer
-	if not customer or not customer.beltItems or customer.paid then
+	if not customer or customer.paid then
 		if byPlayer then
 			Util.notify(byPlayer, "No groceries on the belt.", "info")
 		end
 		return false
 	end
 
+	-- everything scanned? this tap takes the payment instead
+	if customer.readyToPay then
+		takePayment(plot, customer)
+		return true
+	end
+
+	if not customer.beltItems then
+		return false
+	end
 	local entry = table.remove(customer.beltItems, 1)
 	if not entry then
 		return false
@@ -288,21 +349,13 @@ function CustomerManager.scanAtRegister(plot, byPlayer)
 		return true
 	end
 
-	-- last item scanned: ring it up!
-	customer.paid = true
-	customer.state = "Paid"
-	setRegisterDisplay(plot, string.format("$%d\nPAID ✓", customer.subtotal))
-	payOwner(plot, customer, 1, 0, "sale")
-	customer.billboard.Text = THANKS_PHRASES[math.random(#THANKS_PHRASES)]
-	customer.billboard.TextColor3 = Color3.fromRGB(140, 255, 160)
-	if customer.humanoid then
-		customer.humanoid.Jump = true -- a happy hop
+	-- last item scanned: show the total, customer gets their wallet out
+	customer.readyToPay = true
+	setRegisterDisplay(plot, string.format("TOTAL\n$%d", customer.subtotal))
+	customer.billboard.Text = "💳 That's everything!"
+	if plot.registerPrompt then
+		plot.registerPrompt.ActionText = string.format("Take Payment ($%d)", customer.subtotal)
 	end
-	task.delay(1.2, function()
-		if plot.beltCustomer == customer then
-			clearBelt(plot)
-		end
-	end)
 	return true
 end
 
