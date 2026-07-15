@@ -19,10 +19,10 @@ local GROUND = 0.5 -- top surface of the plot floor
 local WALL_HEIGHT = 14
 
 local COLORS = {
-	Pavement = Color3.fromRGB(178, 180, 186),
-	StoreFloor = Color3.fromRGB(240, 242, 247),
-	FloorAccent = Color3.fromRGB(94, 196, 178), -- teal border stripe
-	Wall = Color3.fromRGB(232, 104, 92), -- friendly, brighter grocery red
+	Pavement = Color3.fromRGB(170, 172, 178),
+	StoreFloor = Color3.fromRGB(224, 226, 232),
+	FloorAccent = Color3.fromRGB(78, 182, 164), -- teal border stripe
+	Wall = Color3.fromRGB(206, 86, 78), -- friendly grocery red (smooth, not brick)
 	WallTrim = Color3.fromRGB(250, 250, 248),
 	AwningStripe = Color3.fromRGB(250, 250, 248),
 	Counter = Color3.fromRGB(146, 102, 70),
@@ -67,41 +67,45 @@ function PlotBuilder.buildSection(plot, section)
 	local shelves = {}
 	for index, itemId in ipairs(section.items) do
 		local item = GameConfig.Items[itemId]
-		local x = offset.X + (index - (#section.items + 1) / 2) * 7
+		local x = offset.X + (index - (#section.items + 1) / 2) * 6.5
 		local shelfZ = offset.Z - 3
 
+		-- tidy shelf cabinet (the base unit)
 		local stand = Util.part({
 			Name = itemId .. "Shelf",
-			Size = Vector3.new(4, 4.5, 2),
-			CFrame = origin * CFrame.new(x, GROUND + 2.25, shelfZ),
+			Size = Vector3.new(5.4, 3, 2.6),
+			CFrame = origin * CFrame.new(x, GROUND + 1.5, shelfZ),
 			Color = COLORS.Shelf,
-			Material = Enum.Material.Metal,
+			Material = Enum.Material.SmoothPlastic,
 			Parent = folder,
 		})
 
-		-- colored canopy in the department color, tying the shelves together
+		-- department-colored header board behind the bin, tying the row together
 		Util.part({
-			Name = "ShelfCanopy",
-			Size = Vector3.new(4.4, 0.5, 2.4),
-			CFrame = origin * CFrame.new(x, GROUND + 4.6, shelfZ),
+			Name = "ShelfHeader",
+			Size = Vector3.new(5.4, 1.6, 0.4),
+			CFrame = origin * CFrame.new(x, GROUND + 3.8, shelfZ - 1.1),
 			Color = section.color,
 			Parent = folder,
 		})
 
-		-- the "product" sitting on top of the shelf
+		-- a neat product bin sitting in the cabinet
 		Util.part({
-			Name = "Display",
-			Size = Vector3.new(1.6, 1.6, 1.6),
-			CFrame = origin * CFrame.new(x, GROUND + 5.7, shelfZ),
+			Name = "Bin",
+			Size = Vector3.new(4.6, 1.4, 2),
+			CFrame = origin * CFrame.new(x, GROUND + 3.7, shelfZ),
 			Color = item.color,
 			Material = Enum.Material.SmoothPlastic,
 			Parent = folder,
 		})
 
-		Util.billboard(stand, string.format("%s\n$%d", item.name, item.price), {
-			size = UDim2.fromOffset(110, 44),
-			offsetY = 5.2,
-			maxDistance = 45,
+		-- compact price tag: billboards always face the camera (never backwards),
+		-- and the short range means only the shelf you're near shows its tag
+		Util.billboard(stand, string.format("%s  $%d", item.name, item.price), {
+			size = UDim2.fromOffset(92, 24),
+			offsetY = 2.5,
+			maxDistance = 24,
+			backgroundTransparency = 0.25,
 		})
 
 		local prompt = Instance.new("ProximityPrompt")
@@ -113,7 +117,7 @@ function PlotBuilder.buildSection(plot, section)
 		prompt.Parent = stand
 
 		-- where staff NPCs stand to grab this item
-		plot.shelfPositions[itemId] = (origin * CFrame.new(x, GROUND + 2, shelfZ + 4)).Position
+		plot.shelfPositions[itemId] = (origin * CFrame.new(x, GROUND + 2, shelfZ + 3.5)).Position
 
 		table.insert(shelves, { itemId = itemId, prompt = prompt })
 	end
@@ -252,8 +256,8 @@ local function buildDecorations(plot)
 			Parent = plot.model,
 		})
 		local light = Instance.new("PointLight")
-		light.Brightness = 1.6
-		light.Range = 26
+		light.Brightness = 0.45
+		light.Range = 16
 		light.Color = COLORS.Light
 		light.Parent = fixture
 	end
@@ -318,14 +322,20 @@ function PlotBuilder.build(origin, index)
 		Parent = model,
 	})
 
-	-- walls: front (with door gap), two sides, back
+	-- walls: front (with door gap), two sides, back — smooth for a clean look
 	local wallY = GROUND + WALL_HEIGHT / 2
-	Util.part({ Name = "FrontWallL", Size = Vector3.new(38, WALL_HEIGHT, 1), CFrame = origin * CFrame.new(-26, wallY, 5), Color = COLORS.Wall, Material = Enum.Material.Brick, Parent = model })
-	Util.part({ Name = "FrontWallR", Size = Vector3.new(38, WALL_HEIGHT, 1), CFrame = origin * CFrame.new(26, wallY, 5), Color = COLORS.Wall, Material = Enum.Material.Brick, Parent = model })
-	Util.part({ Name = "DoorHeader", Size = Vector3.new(14, 4, 1), CFrame = origin * CFrame.new(0, GROUND + WALL_HEIGHT - 2, 5), Color = COLORS.Wall, Material = Enum.Material.Brick, Parent = model })
-	Util.part({ Name = "SideWallL", Size = Vector3.new(1, WALL_HEIGHT, 60), CFrame = origin * CFrame.new(-45, wallY, -25), Color = COLORS.Wall, Material = Enum.Material.Brick, Parent = model })
-	Util.part({ Name = "SideWallR", Size = Vector3.new(1, WALL_HEIGHT, 60), CFrame = origin * CFrame.new(45, wallY, -25), Color = COLORS.Wall, Material = Enum.Material.Brick, Parent = model })
-	Util.part({ Name = "BackWall", Size = Vector3.new(90, WALL_HEIGHT, 1), CFrame = origin * CFrame.new(0, wallY, -55), Color = COLORS.Wall, Material = Enum.Material.Brick, Parent = model })
+	local WALL_MAT = Enum.Material.SmoothPlastic
+	Util.part({ Name = "FrontWallL", Size = Vector3.new(38, WALL_HEIGHT, 1), CFrame = origin * CFrame.new(-26, wallY, 5), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
+	Util.part({ Name = "FrontWallR", Size = Vector3.new(38, WALL_HEIGHT, 1), CFrame = origin * CFrame.new(26, wallY, 5), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
+	Util.part({ Name = "DoorHeader", Size = Vector3.new(14, 4, 1), CFrame = origin * CFrame.new(0, GROUND + WALL_HEIGHT - 2, 5), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
+	Util.part({ Name = "SideWallL", Size = Vector3.new(1, WALL_HEIGHT, 60), CFrame = origin * CFrame.new(-45, wallY, -25), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
+	Util.part({ Name = "SideWallR", Size = Vector3.new(1, WALL_HEIGHT, 60), CFrame = origin * CFrame.new(45, wallY, -25), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
+	Util.part({ Name = "BackWall", Size = Vector3.new(90, WALL_HEIGHT, 1), CFrame = origin * CFrame.new(0, wallY, -55), Color = COLORS.Wall, Material = WALL_MAT, Parent = model })
+
+	-- white baseboard along the interior walls for a crisp, finished floor line
+	Util.part({ Name = "Baseboard", Size = Vector3.new(90, 1, 0.4), CFrame = origin * CFrame.new(0, GROUND + 0.6, -54.4), Color = COLORS.WallTrim, Parent = model })
+	Util.part({ Name = "Baseboard", Size = Vector3.new(0.4, 1, 60), CFrame = origin * CFrame.new(-44.4, GROUND + 0.6, -25), Color = COLORS.WallTrim, Parent = model })
+	Util.part({ Name = "Baseboard", Size = Vector3.new(0.4, 1, 60), CFrame = origin * CFrame.new(44.4, GROUND + 0.6, -25), Color = COLORS.WallTrim, Parent = model })
 
 	-- storefront sign above the door
 	local storeSign = Util.part({

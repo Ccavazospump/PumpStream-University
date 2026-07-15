@@ -29,16 +29,16 @@ end
 function Ambiance.setup()
 	clearOld()
 
-	-- bright mid-afternoon with soft shadows
+	-- soft mid-afternoon with gentle shadows (dialed back so nothing blows out)
 	Lighting.ClockTime = 14.5
 	Lighting.GeographicLatitude = 20
-	Lighting.Brightness = 2.4
-	Lighting.ExposureCompensation = 0.1
-	Lighting.EnvironmentDiffuseScale = 0.65
-	Lighting.EnvironmentSpecularScale = 0.6
-	Lighting.Ambient = Color3.fromRGB(120, 122, 132)
-	Lighting.OutdoorAmbient = Color3.fromRGB(158, 166, 182)
-	Lighting.ShadowSoftness = 0.55
+	Lighting.Brightness = 1.4
+	Lighting.ExposureCompensation = -0.05
+	Lighting.EnvironmentDiffuseScale = 0.5
+	Lighting.EnvironmentSpecularScale = 0.45
+	Lighting.Ambient = Color3.fromRGB(92, 94, 104)
+	Lighting.OutdoorAmbient = Color3.fromRGB(136, 144, 158)
+	Lighting.ShadowSoftness = 0.6
 	Lighting.FogEnd = 100000 -- Atmosphere handles distance haze instead
 
 	-- sky
@@ -58,28 +58,28 @@ function Ambiance.setup()
 	atmosphere.Haze = 1.4
 	atmosphere.Parent = Lighting
 
-	-- soft glow on bright things (neon pads, light fixtures)
+	-- glow ONLY on genuinely bright things (high threshold = no white-out)
 	local bloom = Instance.new("BloomEffect")
 	bloom.Name = "GameBloom"
-	bloom.Intensity = 0.55
-	bloom.Size = 24
-	bloom.Threshold = 1.1
+	bloom.Intensity = 0.2
+	bloom.Size = 18
+	bloom.Threshold = 2.0
 	bloom.Parent = Lighting
 
-	-- make the colors pop (the "clean & colorful" look)
+	-- gently richen the colors (subtle, not garish)
 	local colorCorrection = Instance.new("ColorCorrectionEffect")
 	colorCorrection.Name = "GameColorCorrection"
-	colorCorrection.Brightness = 0.02
-	colorCorrection.Contrast = 0.13
-	colorCorrection.Saturation = 0.2
-	colorCorrection.TintColor = Color3.fromRGB(255, 251, 244)
+	colorCorrection.Brightness = 0
+	colorCorrection.Contrast = 0.06
+	colorCorrection.Saturation = 0.1
+	colorCorrection.TintColor = Color3.fromRGB(255, 252, 247)
 	colorCorrection.Parent = Lighting
 
-	-- subtle sun rays
+	-- barely-there sun rays
 	local sunRays = Instance.new("SunRaysEffect")
 	sunRays.Name = "GameSunRays"
-	sunRays.Intensity = 0.1
-	sunRays.Spread = 0.85
+	sunRays.Intensity = 0.06
+	sunRays.Spread = 0.9
 	sunRays.Parent = Lighting
 end
 
