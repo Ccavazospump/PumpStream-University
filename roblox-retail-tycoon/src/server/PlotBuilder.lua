@@ -572,6 +572,7 @@ function PlotBuilder.build(origin, index)
 		doorInside = point(0, 0),
 		shopperIdle = point(2, -12), -- right end of the counter, inside
 		cashierIdle = point(-16, -12), -- behind the counter
+		payPoint = point(-8, -4), -- customer side of the register
 	}
 	-- queue slots along the front of the counter
 	plot.getQueueSlot = function(slotIndex)

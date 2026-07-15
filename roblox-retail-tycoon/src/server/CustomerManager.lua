@@ -100,21 +100,93 @@ local function generateOrder(plot, minLines, maxLines)
 	return order
 end
 
--- Little product model added to the stack a customer carries overhead.
+-- A shopping cart welded in front of the customer (they "push" it).
+-- All parts are non-colliding and massless so it never fights physics.
+local function giveCart(customer)
+	local root = customer.root
+	if not root or not root.Parent then
+		return
+	end
+	local cart = Instance.new("Model")
+	cart.Name = "NPCCart"
+
+	local function cartPart(size, offset, color, shape)
+		local part = Instance.new("Part")
+		if shape then
+			part.Shape = shape
+		end
+		part.Size = size
+		part.Color = color
+		part.Material = Enum.Material.Metal
+		part.CanCollide = false
+		part.CanQuery = false
+		part.Massless = true
+		part.TopSurface = Enum.SurfaceType.Smooth
+		part.BottomSurface = Enum.SurfaceType.Smooth
+		part.CFrame = root.CFrame * offset
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = root
+		weld.Part1 = part
+		weld.Parent = part
+		part.Parent = cart
+		return part
+	end
+
+	local frame = Color3.fromRGB(160, 164, 172)
+	local CART_Z = -3.1 -- basket center, in front of the customer
+	-- basket: floor + 4 low walls (open top so groceries show)
+	cartPart(Vector3.new(2.4, 0.15, 3.0), CFrame.new(0, -1.5, CART_Z), frame)
+	cartPart(Vector3.new(0.15, 1.1, 3.0), CFrame.new(-1.2, -0.95, CART_Z), frame)
+	cartPart(Vector3.new(0.15, 1.1, 3.0), CFrame.new(1.2, -0.95, CART_Z), frame)
+	cartPart(Vector3.new(2.4, 1.1, 0.15), CFrame.new(0, -0.95, CART_Z - 1.5), frame)
+	cartPart(Vector3.new(2.4, 1.1, 0.15), CFrame.new(0, -0.95, CART_Z + 1.5), frame)
+	-- handle bar near the customer
+	cartPart(Vector3.new(2.4, 0.2, 0.2), CFrame.new(0, -0.35, CART_Z + 1.9), Color3.fromRGB(200, 60, 60))
+	-- four little wheels
+	for _, corner in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do
+		cartPart(
+			Vector3.new(0.35, 0.5, 0.5),
+			CFrame.new(corner[1] * 1.0, -2.45, CART_Z + corner[2] * 1.3) * CFrame.Angles(0, 0, math.rad(90)),
+			Color3.fromRGB(45, 45, 50),
+			Enum.PartType.Cylinder
+		)
+	end
+
+	cart.Parent = customer.model
+	customer.cart = cart
+end
+
+-- Product model added to the customer's cart (or held overhead if they
+-- have no cart, e.g. curbside pickups receiving their bags).
 local function addCarryVisual(customer, itemId)
 	local root = customer.root
 	if not root or not root.Parent then
 		return
 	end
-	customer.carriedCount = (customer.carriedCount or 0) + 1
-	local model = ItemVisuals.buildModel(itemId, { anchored = false, scale = 0.65 })
+	local count = customer.carriedCount or 0
+	customer.carriedCount = count + 1
+
+	local model = ItemVisuals.buildModel(itemId, { anchored = false, scale = 0.6 })
 	model.Name = "NPCItem"
-	model:PivotTo(root.CFrame * CFrame.new(0, 2.6 + customer.carriedCount * 1.0, 0))
-	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = root
-	weld.Part1 = model.PrimaryPart
-	weld.Parent = model.PrimaryPart
-	model.Parent = customer.model
+	if customer.cart then
+		-- 2 columns x 3 rows per layer inside the basket
+		local col = (count % 2 == 0) and -0.55 or 0.55
+		local row = (math.floor(count / 2) % 3 - 1) * 0.85
+		local layer = math.floor(count / 6) * 0.75
+		model:PivotTo(root.CFrame * CFrame.new(col, -1.05 + layer, -3.1 + row))
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = root
+		weld.Part1 = model.PrimaryPart
+		weld.Parent = model.PrimaryPart
+		model.Parent = customer.cart
+	else
+		model:PivotTo(root.CFrame * CFrame.new(0, 2.6 + customer.carriedCount * 1.0, 0))
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = root
+		weld.Part1 = model.PrimaryPart
+		weld.Parent = model.PrimaryPart
+		model.Parent = customer.model
+	end
 end
 
 -- Pay the plot owner for a completed order.
@@ -168,7 +240,7 @@ end
 
 local function makeCustomer(plot, name)
 	local model, humanoid, root = Util.createNPC(name, SHIRT_COLORS[math.random(#SHIRT_COLORS)])
-	humanoid.WalkSpeed = GameConfig.Customers.WalkSpeed
+	humanoid.WalkSpeed = GameConfig.Customers.WalkSpeed * (0.85 + math.random() * 0.3)
 	local customer = {
 		model = model,
 		humanoid = humanoid,
@@ -205,16 +277,25 @@ local function setRegisterDisplay(plot, text)
 	end
 end
 
--- Move the front customer's groceries out of their arms onto the belt.
+-- Move the front customer's groceries out of their cart onto the belt.
 local function loadBelt(plot, customer)
 	plot.beltCustomer = customer
 
-	-- take the items out of their arms
+	-- the cart (with its groceries) gets "returned"
+	if customer.cart then
+		customer.cart:Destroy()
+		customer.cart = nil
+	end
 	for _, child in ipairs(customer.model:GetChildren()) do
 		if child.Name == "NPCItem" then
 			child:Destroy()
 		end
 	end
+
+	-- then they step up to the register to face you
+	task.spawn(function()
+		Util.walkTo(customer.model, plot.points.payPoint, 8)
+	end)
 
 	customer.beltItems = {}
 	customer.subtotal = 0
@@ -438,6 +519,7 @@ function CustomerManager.spawnCustomer(plot)
 
 	customer.root.CFrame = CFrame.new(plot.points.customerSpawn)
 	customer.model.Parent = workspace
+	giveCart(customer) -- walk-ins push a shopping cart
 	table.insert(plot.customers, customer)
 
 	if plot.onCustomerSpawned then

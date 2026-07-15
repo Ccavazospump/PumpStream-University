@@ -31,10 +31,10 @@ GameConfig.Customers = {
 	MinSpawnInterval = 5, -- upgrades can never push it below this
 	BaseMaxCustomers = 2, -- customers in the store at once (before upgrades)
 	RegisterPatience = 90, -- seconds they'll wait at the register before storming out
-	WalkSpeed = 13,
+	WalkSpeed = 9, -- leisurely stroll; each customer varies ±15%
 	MaxOrderLines = 5, -- most distinct items in one order
 	QuantityTwoChance = 0.3, -- chance an order line asks for 2 of an item
-	ShopSeconds = { 0.8, 1.8 }, -- how long a customer browses at each shelf
+	ShopSeconds = { 2.0, 4.5 }, -- how long a customer browses at each shelf
 	TipChance = 0.35, -- chance of a tip on checkout
 	TipRange = { 2, 12 }, -- min/max tip
 }
