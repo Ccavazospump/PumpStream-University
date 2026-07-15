@@ -155,6 +155,7 @@ notifyRemote.OnClientEvent:Connect(showToast)
 
 local SOUND_DEFS = {
 	pickup = { file = "rbxasset://sounds/button.wav", pitch = 1.15, volume = 0.5 },
+	scan = { file = "rbxasset://sounds/electronicpingshort.wav", pitch = 1.8, volume = 0.45 },
 	putback = { file = "rbxasset://sounds/button.wav", pitch = 0.8, volume = 0.5 },
 	money = { file = "rbxasset://sounds/electronicpingshort.wav", pitch = 1.2, volume = 0.6, echoPitch = 1.6, echoDelay = 0.09 },
 	orderComplete = { file = "rbxasset://sounds/victory.wav", pitch = 1, volume = 0.3 },
@@ -213,7 +214,7 @@ end)
 local TIPS = {
 	"🏪 Step on a glowing green pad to claim your store!",
 	"🛒 Customers shop the aisles themselves — meet them at the register.",
-	"💵 Stand at the register and use 'Checkout Customer' to ring them up.",
+	"💵 At the register, tap E to SCAN each item off the belt — beep beep!",
 	"📱 Unlock Online Orders for curbside pickups — YOU shop those, for 1.5x pay!",
 	"↩️ Wrong item? Press X to put it back, or use the Returns Bin.",
 	"⭐ Buy the glowing upgrade pad to unlock the next thing — keep expanding!",

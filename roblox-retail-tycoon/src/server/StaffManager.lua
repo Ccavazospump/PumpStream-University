@@ -68,20 +68,14 @@ end
 local function cashierLoop(plot, staff, generation)
 	Util.pathWalkTo(staff.model, plot.points.cashierIdle)
 	while plot.generation == generation and staff.model.Parent do
-		local anyWaiting = false
-		for _, customer in ipairs(plot.customers) do
-			if customer.state == "AtRegister" and not customer.paid then
-				anyWaiting = true
-				break
-			end
-		end
-		if anyWaiting then
-			task.wait(1.4) -- ringing them up
+		local customer = plot.beltCustomer
+		if customer and customer.beltItems and #customer.beltItems > 0 and not customer.paid then
+			task.wait(0.9) -- scans slower than a skilled player
 			if plot.generation == generation then
-				CustomerManager.checkoutAtRegister(plot, nil)
+				CustomerManager.scanAtRegister(plot, nil)
 			end
 		else
-			task.wait(0.8)
+			task.wait(0.6)
 		end
 	end
 end

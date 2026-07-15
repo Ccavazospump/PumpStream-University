@@ -219,7 +219,9 @@ function Util.walkTo(model, position, timeout)
 	end
 	timeout = timeout or 12
 
-	-- MoveTo silently gives up after 8 seconds, so retry for long walks
+	-- MoveTo silently gives up after 8 seconds, so retry for long walks.
+	-- We poll every frame (not every 0.1s) so NPCs flow between targets
+	-- without the stop-start stutter.
 	for _ = 1, 3 do
 		if not model.Parent then
 			return false
@@ -237,7 +239,7 @@ function Util.walkTo(model, position, timeout)
 				connection:Disconnect()
 				return false
 			end
-			task.wait(0.1)
+			task.wait()
 		end
 		connection:Disconnect()
 		if reached then
@@ -280,11 +282,30 @@ function Util.pathWalkTo(model, position)
 	end)
 
 	if ok and path.Status == Enum.PathStatus.Success then
-		for _, waypoint in ipairs(path:GetWaypoints()) do
+		-- Pathfinding returns a waypoint every ~3 studs, and stopping at
+		-- each one makes NPCs stutter. Keep only the CORNERS (where the
+		-- direction actually changes) plus the destination, so NPCs walk
+		-- long smooth runs.
+		local raw = path:GetWaypoints()
+		local points = {}
+		for i = 2, #raw - 1 do
+			local before = raw[i].Position - raw[i - 1].Position
+			local after = raw[i + 1].Position - raw[i].Position
+			before = Vector3.new(before.X, 0, before.Z)
+			after = Vector3.new(after.X, 0, after.Z)
+			if before.Magnitude > 0.05 and after.Magnitude > 0.05 and before.Unit:Dot(after.Unit) < 0.98 then
+				table.insert(points, raw[i].Position)
+			end
+		end
+		if #raw > 0 then
+			table.insert(points, raw[#raw].Position)
+		end
+
+		for _, point in ipairs(points) do
 			if not model.Parent then
 				return false
 			end
-			if not Util.walkTo(model, waypoint.Position, 6) then
+			if not Util.walkTo(model, point, 8) then
 				return false
 			end
 		end

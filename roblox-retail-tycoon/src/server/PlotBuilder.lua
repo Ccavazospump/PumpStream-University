@@ -388,27 +388,74 @@ function PlotBuilder.build(origin, index)
 		Reflectance = 0.05,
 		Parent = model,
 	})
-	local register = Util.part({
-		Name = "Register",
-		Size = Vector3.new(2, 2, 2),
-		CFrame = origin * CFrame.new(-8, GROUND + 4.2, -8),
-		Color = Color3.fromRGB(40, 40, 45),
+	-- conveyor belt running along the counter top toward the register
+	Util.part({
+		Name = "BeltStrip",
+		Size = Vector3.new(16, 0.25, 2.3),
+		CFrame = origin * CFrame.new(-19, GROUND + 3.55, -8),
+		Color = Color3.fromRGB(52, 54, 60),
+		Material = Enum.Material.Fabric,
 		Parent = model,
 	})
-	Util.billboard(register, "CHECKOUT", {
-		size = UDim2.fromOffset(110, 26),
-		offsetY = 2,
-		maxDistance = 35,
+	Util.part({ Name = "BeltRail", Size = Vector3.new(16, 0.35, 0.25), CFrame = origin * CFrame.new(-19, GROUND + 3.65, -9.25), Color = Color3.fromRGB(180, 182, 188), Material = Enum.Material.Metal, Parent = model })
+	Util.part({ Name = "BeltRail", Size = Vector3.new(16, 0.35, 0.25), CFrame = origin * CFrame.new(-19, GROUND + 3.65, -6.75), Color = Color3.fromRGB(180, 182, 188), Material = Enum.Material.Metal, Parent = model })
+
+	-- red laser scanner at the register end of the belt
+	Util.part({
+		Name = "ScannerBeam",
+		Size = Vector3.new(0.15, 0.3, 2.3),
+		CFrame = origin * CFrame.new(-10.5, GROUND + 3.75, -8),
+		Color = Color3.fromRGB(255, 60, 50),
+		Material = Enum.Material.Neon,
+		Parent = model,
 	})
-	-- ringing up customers happens HERE, at the register
+
+	-- a register that looks like a register: base + angled screen + keypad
+	local registerBase = Util.part({
+		Name = "Register",
+		Size = Vector3.new(2.4, 1, 2.4),
+		CFrame = origin * CFrame.new(-8, GROUND + 3.9, -8),
+		Color = Color3.fromRGB(60, 62, 70),
+		Parent = model,
+	})
+	local screen = Util.part({
+		Name = "RegisterScreen",
+		Size = Vector3.new(2.2, 1.8, 0.2),
+		CFrame = origin * CFrame.new(-8, GROUND + 5.4, -8.4) * CFrame.Angles(math.rad(-12), 0, 0),
+		Color = Color3.fromRGB(22, 24, 30),
+		Parent = model,
+	})
+	plot.registerDisplay = Util.surfaceSign(screen, Enum.NormalId.Front, "REGISTER\nREADY", Color3.fromRGB(120, 255, 170))
+	Util.part({
+		Name = "Keypad",
+		Size = Vector3.new(1.6, 0.25, 1.2),
+		CFrame = origin * CFrame.new(-8, GROUND + 4.5, -7.2) * CFrame.Angles(math.rad(8), 0, 0),
+		Color = Color3.fromRGB(200, 202, 208),
+		Parent = model,
+	})
+
+	-- scanning happens HERE: quick E taps, one per item
 	local registerPrompt = Instance.new("ProximityPrompt")
-	registerPrompt.ActionText = "Checkout Customer"
+	registerPrompt.ActionText = "Scan Item"
 	registerPrompt.ObjectText = "Register"
-	registerPrompt.HoldDuration = 0.25
+	registerPrompt.HoldDuration = 0
 	registerPrompt.MaxActivationDistance = 9
 	registerPrompt.RequiresLineOfSight = false
-	registerPrompt.Parent = register
+	registerPrompt.Parent = registerBase
 	plot.registerPrompt = registerPrompt
+
+	-- belt slot positions: slot 1 is next in line (nearest the scanner),
+	-- higher slots stretch toward the customer end; slot 0 is the scanner
+	-- itself. Items slide slot-to-slot toward the laser.
+	plot.getBeltSlot = function(slotIndex)
+		if slotIndex <= 0 then
+			return origin * CFrame.new(-10.5, GROUND + 4.35, -8)
+		end
+		local clamped = math.min(slotIndex, 7)
+		local x = -25.5 + (7 - clamped) * 1.9
+		local zJitter = (slotIndex - clamped) * 0.4
+		return origin * CFrame.new(x, GROUND + 4.35, -8 + zJitter)
+	end
 
 	-- returns bin: put back wrongly-grabbed items
 	local returnsBin = Util.part({

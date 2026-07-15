@@ -35,6 +35,22 @@ local SHIRT_COLORS = {
 	Color3.fromRGB(150, 150, 160), Color3.fromRGB(230, 210, 90),
 }
 
+local THANKS_PHRASES = {
+	"Thank you! 😄",
+	"Have a great day!",
+	"See ya next time!",
+	"Love this store! ⭐",
+	"Quick and easy, thanks!",
+}
+
+local CHATTER_PHRASES = {
+	"Hmm, which one...",
+	"Ooh, that looks good!",
+	"On sale? Nice.",
+	"Almost done...",
+	"My kids love these.",
+}
+
 -- ============================ helpers ================================
 
 local function orderText(customer, title)
@@ -168,36 +184,155 @@ local function makeCustomer(plot, name)
 	return customer
 end
 
--- ========================= register checkout =========================
+-- ================ register checkout (conveyor + scanning) ================
 
--- Ring up the next customer waiting at the register. Called by the
--- player's prompt on the register, or by a Cashier (byPlayer = nil).
-function CustomerManager.checkoutAtRegister(plot, byPlayer)
+-- Glide an anchored model from where it is to a target pivot.
+local function slideModel(model, targetCF, duration)
+	local start = model:GetPivot()
+	local steps = math.max(4, math.floor(duration * 30))
+	for step = 1, steps do
+		if not model.Parent then
+			return
+		end
+		model:PivotTo(start:Lerp(targetCF, step / steps))
+		task.wait(duration / steps)
+	end
+end
+
+local function setRegisterDisplay(plot, text)
+	if plot.registerDisplay then
+		plot.registerDisplay.Text = text
+	end
+end
+
+-- Move the front customer's groceries out of their arms onto the belt.
+local function loadBelt(plot, customer)
+	plot.beltCustomer = customer
+
+	-- take the items out of their arms
+	for _, child in ipairs(customer.model:GetChildren()) do
+		if child.Name == "NPCItem" then
+			child:Destroy()
+		end
+	end
+
+	customer.beltItems = {}
+	customer.subtotal = 0
+	local count = 0
+	for _, line in ipairs(customer.order) do
+		for _ = 1, line.need do
+			count += 1
+			local model = ItemVisuals.buildModel(line.itemId, { anchored = true, scale = 0.8 })
+			model.Name = "BeltItem"
+			model:PivotTo(plot.getBeltSlot(count))
+			model.Parent = plot.model
+			table.insert(customer.beltItems, { itemId = line.itemId, model = model })
+		end
+	end
+	customer.billboard.Text = "🛒 Unloading the belt..."
+	setRegisterDisplay(plot, string.format("%d ITEMS\n$0", count))
+end
+
+local function clearBelt(plot)
+	local customer = plot.beltCustomer
+	if customer and customer.beltItems then
+		for _, entry in ipairs(customer.beltItems) do
+			if entry.model then
+				entry.model:Destroy()
+			end
+		end
+		customer.beltItems = nil
+	end
+	plot.beltCustomer = nil
+	setRegisterDisplay(plot, "REGISTER\nREADY")
+end
+
+-- Scan ONE item off the belt. Tap after tap until the order is rung up —
+-- called by the player's register prompt, or by a Cashier (byPlayer = nil).
+function CustomerManager.scanAtRegister(plot, byPlayer)
 	if byPlayer and plot.owner ~= byPlayer then
 		Util.notify(byPlayer, "This isn't your register!", "error")
 		return false
 	end
-	local target
-	for _, customer in ipairs(plot.customers) do
-		if customer.state == "AtRegister" and not customer.paid then
-			if not target or (customer.slot or 99) < (target.slot or 99) then
-				target = customer
-			end
-		end
-	end
-	if not target then
+	local customer = plot.beltCustomer
+	if not customer or not customer.beltItems or customer.paid then
 		if byPlayer then
-			Util.notify(byPlayer, "No one is waiting at the register.", "info")
+			Util.notify(byPlayer, "No groceries on the belt.", "info")
 		end
 		return false
 	end
 
-	target.paid = true
-	target.state = "Paid"
-	payOwner(plot, target, 1, 0, "sale")
-	target.billboard.Text = "😄 Thanks!"
-	target.billboard.TextColor3 = Color3.fromRGB(140, 255, 160)
+	local entry = table.remove(customer.beltItems, 1)
+	if not entry then
+		return false
+	end
+
+	customer.subtotal += GameConfig.Items[entry.itemId].price
+	Util.sound(plot.owner, "scan")
+
+	-- slide the scanned item into the laser, then poof
+	task.spawn(function()
+		slideModel(entry.model, plot.getBeltSlot(0), 0.18)
+		if entry.model then
+			entry.model:Destroy()
+		end
+	end)
+	-- everyone else shuffles one slot forward
+	for index, remaining in ipairs(customer.beltItems) do
+		task.spawn(slideModel, remaining.model, plot.getBeltSlot(index), 0.25)
+	end
+
+	local left = #customer.beltItems
+	if left > 0 then
+		setRegisterDisplay(plot, string.format("$%d\n%d left", customer.subtotal, left))
+		return true
+	end
+
+	-- last item scanned: ring it up!
+	customer.paid = true
+	customer.state = "Paid"
+	setRegisterDisplay(plot, string.format("$%d\nPAID ✓", customer.subtotal))
+	payOwner(plot, customer, 1, 0, "sale")
+	customer.billboard.Text = THANKS_PHRASES[math.random(#THANKS_PHRASES)]
+	customer.billboard.TextColor3 = Color3.fromRGB(140, 255, 160)
+	if customer.humanoid then
+		customer.humanoid.Jump = true -- a happy hop
+	end
+	task.delay(1.2, function()
+		if plot.beltCustomer == customer then
+			clearBelt(plot)
+		end
+	end)
 	return true
+end
+
+-- Watches the register line: when the belt is free, the next customer in
+-- line unloads their groceries onto it.
+local function startBeltWatcher(plot, generation)
+	task.spawn(function()
+		while plot.generation == generation and plot.owner do
+			local current = plot.beltCustomer
+			if current then
+				local gone = not current.model or not current.model.Parent or current.state == "Left"
+				if gone then
+					clearBelt(plot)
+				end
+			else
+				local next_
+				for _, customer in ipairs(plot.customers) do
+					if customer.state == "AtRegister" and not customer.paid then
+						if not next_ or (customer.slot or 99) < (next_.slot or 99) then
+							next_ = customer
+						end
+					end
+				end
+				if next_ then
+					loadBelt(plot, next_)
+				end
+			end
+			task.wait(0.3)
+		end
+	end)
 end
 
 -- ====================== curbside item delivery =======================
@@ -228,8 +363,11 @@ function CustomerManager.deliver(plot, customer, itemId, count)
 				Util.sound(plot.owner, "orderComplete")
 			end
 			payOwner(plot, customer, GameConfig.OnlineOrders.PayMultiplier, GameConfig.OnlineOrders.PickupFee, "curbside pickup")
-			customer.billboard.Text = "📦 Got everything, thanks!"
+			customer.billboard.Text = "📦 " .. THANKS_PHRASES[math.random(#THANKS_PHRASES)]
 			customer.billboard.TextColor3 = Color3.fromRGB(140, 255, 160)
+			if customer.humanoid then
+				customer.humanoid.Jump = true
+			end
 		else
 			customer.billboard.Text = orderText(customer, "📱 Curbside order:")
 		end
@@ -271,6 +409,10 @@ function CustomerManager.spawnCustomer(plot)
 			local shelfPosition = plot.shelfPositions[line.itemId]
 			if shelfPosition then
 				Util.pathWalkTo(model, shelfPosition)
+				-- a little browsing chatter brings the store to life
+				if math.random() < 0.3 then
+					customer.billboard.Text = "💬 " .. CHATTER_PHRASES[math.random(#CHATTER_PHRASES)]
+				end
 				task.wait(GameConfig.Customers.ShopSeconds[1] + math.random() * (GameConfig.Customers.ShopSeconds[2] - GameConfig.Customers.ShopSeconds[1]))
 				if plot.generation ~= generation or not model.Parent then
 					break
@@ -332,6 +474,7 @@ end
 -- Keep spawning walk-ins while the plot stays claimed.
 function CustomerManager.startLoop(plot)
 	local generation = plot.generation
+	startBeltWatcher(plot, generation)
 	task.spawn(function()
 		task.wait(3)
 		while plot.generation == generation and plot.owner do
@@ -447,6 +590,7 @@ end
 -- ============================ cleanup ================================
 
 function CustomerManager.clearAll(plot)
+	clearBelt(plot)
 	for i = #plot.customers, 1, -1 do
 		if plot.customers[i].model then
 			plot.customers[i].model:Destroy()

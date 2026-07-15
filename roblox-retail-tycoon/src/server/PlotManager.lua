@@ -219,9 +219,9 @@ function PlotManager.init()
 			ItemManager.putBackAll(player)
 		end)
 
-		-- the register: where walk-in customers get checked out
+		-- the register: scan items off the belt, one tap each
 		plot.registerPrompt.Triggered:Connect(function(player)
-			CustomerManager.checkoutAtRegister(plot, player)
+			CustomerManager.scanAtRegister(plot, player)
 		end)
 	end
 end
