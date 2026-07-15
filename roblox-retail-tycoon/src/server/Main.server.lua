@@ -21,6 +21,7 @@ local Economy = require(script.Parent.Economy)
 local SaveManager = require(script.Parent.SaveManager)
 local ItemManager = require(script.Parent.ItemManager)
 local PlotManager = require(script.Parent.PlotManager)
+local Ambiance = require(script.Parent.Ambiance)
 
 -- ground plane + spawn (skipped if the place already has a Baseplate)
 if not workspace:FindFirstChild("Baseplate") then
@@ -44,6 +45,7 @@ if not workspace:FindFirstChildOfClass("SpawnLocation") then
 	spawnLocation.Parent = workspace
 end
 
+Ambiance.setup()
 PlotManager.init()
 SaveManager.startAutosave()
 

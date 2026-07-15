@@ -48,10 +48,22 @@ local function styledLabel(parent, textSize)
 	return label
 end
 
--- cash (top center)
+-- cash (top center) — with a green gradient + outline so it pops
 local cashFrame = styledFrame(UDim2.fromOffset(190, 46), UDim2.new(0.5, 0, 0, 12))
+cashFrame.BackgroundTransparency = 0.1
+do
+	local gradient = Instance.new("UIGradient")
+	gradient.Color = ColorSequence.new(Color3.fromRGB(38, 70, 48), Color3.fromRGB(22, 34, 28))
+	gradient.Rotation = 90
+	gradient.Parent = cashFrame
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(120, 235, 150)
+	stroke.Thickness = 1.6
+	stroke.Transparency = 0.2
+	stroke.Parent = cashFrame
+end
 local cashLabel = styledLabel(cashFrame, 24)
-cashLabel.TextColor3 = Color3.fromRGB(140, 255, 160)
+cashLabel.TextColor3 = Color3.fromRGB(150, 255, 170)
 
 -- carry counter (under the cash)
 local carryFrame = styledFrame(UDim2.fromOffset(130, 34), UDim2.new(0.5, 0, 0, 64))

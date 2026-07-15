@@ -19,16 +19,20 @@ local GROUND = 0.5 -- top surface of the plot floor
 local WALL_HEIGHT = 14
 
 local COLORS = {
-	Pavement = Color3.fromRGB(163, 162, 165),
-	StoreFloor = Color3.fromRGB(230, 228, 220),
-	Wall = Color3.fromRGB(216, 90, 74), -- warm grocery-store red
-	WallTrim = Color3.fromRGB(245, 241, 227),
-	Counter = Color3.fromRGB(120, 84, 58),
-	Shelf = Color3.fromRGB(70, 70, 76),
-	ClaimPad = Color3.fromRGB(80, 220, 120),
+	Pavement = Color3.fromRGB(178, 180, 186),
+	StoreFloor = Color3.fromRGB(240, 242, 247),
+	FloorAccent = Color3.fromRGB(94, 196, 178), -- teal border stripe
+	Wall = Color3.fromRGB(232, 104, 92), -- friendly, brighter grocery red
+	WallTrim = Color3.fromRGB(250, 250, 248),
+	AwningStripe = Color3.fromRGB(250, 250, 248),
+	Counter = Color3.fromRGB(146, 102, 70),
+	CounterTop = Color3.fromRGB(238, 228, 210),
+	Shelf = Color3.fromRGB(96, 100, 112),
+	Light = Color3.fromRGB(255, 250, 235),
+	ClaimPad = Color3.fromRGB(88, 226, 128),
 	PadAvailable = Color3.fromRGB(255, 200, 60),
 	PadOwned = Color3.fromRGB(80, 200, 110),
-	PadLocked = Color3.fromRGB(110, 110, 115),
+	PadLocked = Color3.fromRGB(120, 122, 130),
 }
 
 -- Builds one department (floor mat, sign, one stocked shelf per item).
@@ -75,12 +79,22 @@ function PlotBuilder.buildSection(plot, section)
 			Parent = folder,
 		})
 
+		-- colored canopy in the department color, tying the shelves together
+		Util.part({
+			Name = "ShelfCanopy",
+			Size = Vector3.new(4.4, 0.5, 2.4),
+			CFrame = origin * CFrame.new(x, GROUND + 4.6, shelfZ),
+			Color = section.color,
+			Parent = folder,
+		})
+
 		-- the "product" sitting on top of the shelf
 		Util.part({
 			Name = "Display",
 			Size = Vector3.new(1.6, 1.6, 1.6),
-			CFrame = origin * CFrame.new(x, GROUND + 5.3, shelfZ),
+			CFrame = origin * CFrame.new(x, GROUND + 5.7, shelfZ),
 			Color = item.color,
+			Material = Enum.Material.SmoothPlastic,
 			Parent = folder,
 		})
 
@@ -183,6 +197,78 @@ function PlotBuilder.refreshUpgradePads(plot, ownedSet)
 	end
 end
 
+-- Decorative extras that don't affect gameplay: roof-line trim, a striped
+-- entrance awning, hanging light fixtures (no solid roof, so you can still
+-- see into the store from above), and a welcome mat.
+local function buildDecorations(plot)
+	local origin = plot.origin
+	local topY = GROUND + WALL_HEIGHT
+
+	-- white trim band capping every wall for a finished edge
+	local trims = {
+		{ Size = Vector3.new(92, 1, 1.4), Pos = Vector3.new(0, topY, 5) },
+		{ Size = Vector3.new(92, 1, 1.4), Pos = Vector3.new(0, topY, -55) },
+		{ Size = Vector3.new(1.4, 1, 62), Pos = Vector3.new(-45, topY, -25) },
+		{ Size = Vector3.new(1.4, 1, 62), Pos = Vector3.new(45, topY, -25) },
+	}
+	for _, trim in ipairs(trims) do
+		Util.part({
+			Name = "RoofTrim",
+			Size = trim.Size,
+			CFrame = origin * CFrame.new(trim.Pos.X, trim.Pos.Y, trim.Pos.Z),
+			Color = COLORS.WallTrim,
+			Parent = plot.model,
+		})
+	end
+
+	-- striped awning over the entrance (alternating red/white slats)
+	for i = 0, 6 do
+		local stripeColor = (i % 2 == 0) and COLORS.Wall or COLORS.AwningStripe
+		Util.part({
+			Name = "Awning",
+			Size = Vector3.new(2, 0.4, 5),
+			CFrame = origin * CFrame.new(-6 + i * 2, GROUND + WALL_HEIGHT - 4.5, 8)
+				* CFrame.Angles(math.rad(-28), 0, 0),
+			Color = stripeColor,
+			Material = Enum.Material.Fabric,
+			Parent = plot.model,
+		})
+	end
+
+	-- hanging light fixtures inside (neon panel + a warm PointLight each)
+	for _, pos in ipairs({
+		Vector3.new(-22, topY - 2, -20),
+		Vector3.new(22, topY - 2, -20),
+		Vector3.new(-22, topY - 2, -42),
+		Vector3.new(22, topY - 2, -42),
+		Vector3.new(0, topY - 2, -12),
+	}) do
+		local fixture = Util.part({
+			Name = "LightFixture",
+			Size = Vector3.new(10, 0.4, 3),
+			CFrame = origin * CFrame.new(pos.X, pos.Y, pos.Z),
+			Color = COLORS.Light,
+			Material = Enum.Material.Neon,
+			Parent = plot.model,
+		})
+		local light = Instance.new("PointLight")
+		light.Brightness = 1.6
+		light.Range = 26
+		light.Color = COLORS.Light
+		light.Parent = fixture
+	end
+
+	-- welcome mat at the door
+	Util.part({
+		Name = "WelcomeMat",
+		Size = Vector3.new(12, 0.12, 5),
+		CFrame = origin * CFrame.new(0, GROUND + 0.16, 8),
+		Color = COLORS.FloorAccent,
+		Material = Enum.Material.Fabric,
+		Parent = plot.model,
+	})
+end
+
 -- Build the full plot shell and return the plot state table.
 function PlotBuilder.build(origin, index)
 	local model = Instance.new("Model")
@@ -212,12 +298,23 @@ function PlotBuilder.build(origin, index)
 		Parent = model,
 	})
 
+	-- teal accent slab just under the floor, so its edge frames the store
+	Util.part({
+		Name = "FloorAccent",
+		Size = Vector3.new(94, 0.2, 64),
+		CFrame = origin * CFrame.new(0, GROUND + 0.02, -25),
+		Color = COLORS.FloorAccent,
+		Parent = model,
+	})
+
 	-- store interior floor
 	Util.part({
 		Name = "StoreFloor",
 		Size = Vector3.new(90, 0.2, 60),
 		CFrame = origin * CFrame.new(0, GROUND + 0.05, -25),
 		Color = COLORS.StoreFloor,
+		Material = Enum.Material.SmoothPlastic,
+		Reflectance = 0.04,
 		Parent = model,
 	})
 
@@ -247,6 +344,15 @@ function PlotBuilder.build(origin, index)
 		CFrame = origin * CFrame.new(0, GROUND + 1.5, -8),
 		Color = COLORS.Counter,
 		Material = Enum.Material.WoodPlanks,
+		Parent = model,
+	})
+	Util.part({
+		Name = "CounterTop",
+		Size = Vector3.new(24.6, 0.4, 3.6),
+		CFrame = origin * CFrame.new(0, GROUND + 3.2, -8),
+		Color = COLORS.CounterTop,
+		Material = Enum.Material.SmoothPlastic,
+		Reflectance = 0.05,
 		Parent = model,
 	})
 	local register = Util.part({
@@ -286,6 +392,7 @@ function PlotBuilder.build(origin, index)
 	plot.sectionsFolder = sectionsFolder
 
 	buildUpgradePads(plot)
+	buildDecorations(plot)
 
 	-- key walking positions (world space)
 	local function point(x, z)
