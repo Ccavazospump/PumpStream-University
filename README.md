@@ -1,7 +1,8 @@
-# PumpStream-University
+# 🛒 Retail Tycoon (Roblox)
 
-## Projects
+A grocery-store tycoon game for Roblox: claim a plot, take customers'
+orders at the counter, run and grab their items off the shelves, check
+them out, and spend your earnings on new departments, upgrades, and staff.
 
-- [🛒 Roblox Retail Tycoon](roblox-retail-tycoon/README.md) — a grocery-store
-  tycoon game for Roblox: claim a plot, serve NPC customers, unlock
-  departments, and hire staff. See its README for Studio setup instructions.
+- **All the code and setup instructions:** [`roblox-retail-tycoon/`](roblox-retail-tycoon/README.md)
+- **Game design + roadmap:** [`roblox-retail-tycoon/docs/GAME_DESIGN.md`](roblox-retail-tycoon/docs/GAME_DESIGN.md)
